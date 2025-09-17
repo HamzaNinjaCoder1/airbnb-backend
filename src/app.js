@@ -122,6 +122,10 @@ io.on('connection', (socket) => {
   });
 });
 
+app.get('/', (req, res) => {
+  res.send('Hello World');
+});
+
 AppDataSource.initialize()
   .then(() => {
     console.log('Connected to the database');
