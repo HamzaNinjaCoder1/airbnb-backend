@@ -4,6 +4,8 @@ import AppDataSource from "../config/db.js";
 
 const userRepo = AppDataSource.getRepository(usersmodule);
 
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-2024';
+
 export const authMiddleware = async (req, res, next) => {
     try{
         console.log('Auth middleware - cookies:', req.cookies);
@@ -13,7 +15,7 @@ export const authMiddleware = async (req, res, next) => {
             return res.status(401).json({error: "Unauthorized - No token"});
         }
         console.log('Token found:', token);
-        const decoded = jwt.verify(token, 'your-super-secret-jwt-key-2024');
+        const decoded = jwt.verify(token, JWT_SECRET);
         console.log('Decoded token:', decoded);
         const user = await userRepo.findOne({where: {id: decoded.userId}});
         if (!user) {

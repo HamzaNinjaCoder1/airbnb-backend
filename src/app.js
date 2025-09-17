@@ -19,13 +19,18 @@ const allowedOrigins = [
   "https://airbnb-frontend-sooty.vercel.app",
   process.env.CLIENT_ORIGIN || 'http://localhost:5173'
 ];
+const isProd = process.env.NODE_ENV === 'production';
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST'],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT', 'OPTIONS'],
     credentials: true,
   },
 });
@@ -38,7 +43,11 @@ webpush.setVapidDetails(
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   })
 );
@@ -76,8 +85,8 @@ app.use(
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 7, 
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
     },
   })
 );

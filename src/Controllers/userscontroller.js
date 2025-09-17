@@ -5,6 +5,18 @@ import jwt from "jsonwebtoken";
 
 
 const userRepo = AppDataSource.getRepository(usersmodule);
+const isProd = process.env.NODE_ENV === 'production';
+const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-2024";
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined; // optional
+const baseCookieOptions = {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    path: '/',
+};
+if (COOKIE_DOMAIN) {
+    baseCookieOptions.domain = COOKIE_DOMAIN;
+}
 
 export const createUser = async (req, res) => {
     const {first_name, last_name, email, password} = req.body;
@@ -36,8 +48,8 @@ export const createUser = async (req, res) => {
         password_hash
     });
     await userRepo.save(newUser);
-    let token = jwt.sign({userId: newUser.id}, "your-super-secret-jwt-key-2024", {expiresIn: "12h"});
-    res.cookie("token", token, {httpOnly: true, secure: false, maxAge: 12 * 60 * 60 * 1000});
+    let token = jwt.sign({userId: newUser.id}, JWT_SECRET, {expiresIn: "12h"});
+    res.cookie("token", token, { ...baseCookieOptions, maxAge: 12 * 60 * 60 * 1000 });
     return res.status(201).json({message: "User created successfully", user: newUser});
 }
 
@@ -61,8 +73,8 @@ export const login = async (req, res) => {
     if (user) {
         const passwordmatch = await bcrypt.compare(password, user.password_hash);
         if (passwordmatch) {
-            let token = jwt.sign({userId: user.id}, "your-super-secret-jwt-key-2024", {expiresIn: "12h"});
-            res.cookie("token", token, {httpOnly: true, secure: false, maxAge: 12 * 60 * 60 * 1000});
+            let token = jwt.sign({userId: user.id}, JWT_SECRET, {expiresIn: "12h"});
+            res.cookie("token", token, { ...baseCookieOptions, maxAge: 12 * 60 * 60 * 1000 });
             console.log("Session after login:", req.session);
             return res.status(200).json({success: true, message: "Login successful", token: token});
         } else {
@@ -75,12 +87,8 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
     try {
-        // Clear auth token cookie
-        res.clearCookie("token", {
-            httpOnly: true,
-            secure: false,
-            sameSite: 'lax',
-        });
+        // Clear auth token cookie (mirror creation options)
+        res.clearCookie("token", { ...baseCookieOptions });
 
         // Destroy session if present
         if (req.session) {
