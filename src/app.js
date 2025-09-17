@@ -15,11 +15,16 @@ import webpush from 'web-push';
 import dataRouter from './Routes/data.js';
 import usersRouter from './Routes/users.js';
 
+const allowedOrigins = [
+  "https://airbnb-frontend-sooty.vercel.app",
+  process.env.CLIENT_ORIGIN || 'http://localhost:5173'
+];
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -33,7 +38,7 @@ webpush.setVapidDetails(
 
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
   })
 );
@@ -71,7 +76,7 @@ app.use(
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 7, 
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       secure: process.env.NODE_ENV === 'production',
     },
   })
