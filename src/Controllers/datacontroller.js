@@ -785,7 +785,7 @@ export const sendBookingNotification = async (guestId, listingId, io, options = 
     }
 
     // Create system message
-    const messageText = `A new booking has been made for your listing "${listing.title}".`;
+    const messageText = options.customMessage || `A new booking has been made for your listing "${listing.title}".`;
     const newMessage = await messageRepo.save(messageRepo.create({
       message_text: messageText,
       conversation_id: conversation.id,
@@ -824,7 +824,8 @@ export const sendBookingNotification = async (guestId, listingId, io, options = 
           sender_id: parsedGuestId, 
           messageId: newMessage.id, 
           bookingId: options.bookingId, 
-          type: "booking" 
+          type: "booking",
+          listingId: parsedListingId
         }
       });
 

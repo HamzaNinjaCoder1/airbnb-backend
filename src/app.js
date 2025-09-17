@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename);
 
 const allowedOrigins = [
   "https://airbnb-frontend-sooty.vercel.app",
+  "https://dynamic-tranquility-production.up.railway.app",
   process.env.CLIENT_ORIGIN || 'http://localhost:5173'
 ];
 const isProd = process.env.NODE_ENV === 'production';

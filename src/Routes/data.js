@@ -207,6 +207,63 @@ dataRouter.get('/push-subscriptions/:userId', authMiddleware, async (req, res) =
   }
 });
 
+// Send booking notification endpoint
+dataRouter.post('/notifications/send-booking', authMiddleware, async (req, res) => {
+  try {
+    const { guestId, listingId, bookingId, message } = req.body;
+    const currentUserId = parseInt(req.user.id);
+    
+    // Validate required fields
+    if (!guestId || !listingId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "guestId and listingId are required" 
+      });
+    }
+    
+    const parsedGuestId = parseInt(guestId);
+    const parsedListingId = parseInt(listingId);
+    
+    // Validate that the current user is either the guest or has permission to send notifications
+    if (parsedGuestId !== currentUserId) {
+      // You might want to add additional permission checks here
+      // For now, we'll allow it but log it
+      console.log(`User ${currentUserId} sending notification for guest ${parsedGuestId}`);
+    }
+    
+    const { sendBookingNotification } = await import('../Controllers/datacontroller.js');
+    const result = await sendBookingNotification(parsedGuestId, parsedListingId, req.io, { 
+      bookingId: bookingId || 'manual-notification',
+      customMessage: message
+    });
+    
+    if (result.success) {
+      return res.status(200).json({ 
+        success: true, 
+        message: "Booking notification sent successfully",
+        data: {
+          conversation: result.conversation,
+          message: result.message,
+          notificationSent: true
+        }
+      });
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Failed to send booking notification",
+        error: result.error 
+      });
+    }
+  } catch (error) {
+    console.error("Error sending booking notification:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to send booking notification", 
+      error: error.message 
+    });
+  }
+});
+
 // Test notification endpoint
 dataRouter.post('/test-notification', authMiddleware, async (req, res) => {
   try {
