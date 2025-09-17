@@ -10,10 +10,14 @@ import mysqlSession from 'express-mysql-session';
 import { Server } from 'socket.io';
 import http from 'http';
 import webpush from 'web-push';
+import { fileURLToPath } from 'url';
 
 // All of the routers import here
 import dataRouter from './Routes/data.js';
 import usersRouter from './Routes/users.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const allowedOrigins = [
   "https://airbnb-frontend-sooty.vercel.app",
