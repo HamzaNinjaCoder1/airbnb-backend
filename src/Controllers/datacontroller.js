@@ -480,7 +480,6 @@ export const replaceListingImage = async (req, res) => {
       return res.status(404).json({ message: "Listing not found" });
     }
 
-    // Ensure image exists and belongs to this listing
     const imageRecord = await listingImageRepo.findOne({ where: { id: imageId, listing_id: listingId } });
     if (!imageRecord) {
       return res.status(404).json({ message: "Image not found for this listing" });
