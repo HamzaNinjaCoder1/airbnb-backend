@@ -337,7 +337,7 @@ export const uploadMultipleImages = async (req, res) => {
       return res.status(400).json({ message: "Valid listingId is required" });
     }
 
-    // Normalize files whether uploaded via fields (images/image) or array
+    // Normalize files whether uploaded via fields (images/image), array, or single file
     let images = [];
     if (Array.isArray(req.files)) {
       images = req.files;
@@ -345,6 +345,10 @@ export const uploadMultipleImages = async (req, res) => {
       const fromImages = Array.isArray(req.files.images) ? req.files.images : [];
       const fromImage = Array.isArray(req.files.image) ? req.files.image : (req.files.image ? [req.files.image] : []);
       images = [...fromImages, ...fromImage];
+    }
+    // Support multer.single('image') which sets req.file
+    if ((!images || images.length === 0) && req.file) {
+      images = [req.file];
     }
     console.log('[uploadMultipleImages] Files received', {
       filesProvided: Array.isArray(images),
@@ -355,7 +359,7 @@ export const uploadMultipleImages = async (req, res) => {
     if (!images || images.length === 0) {
       return res.status(400).json({ 
         message: "No images provided",
-        hint: "Ensure request is multipart/form-data with field name 'images'",
+        hint: "Ensure request is multipart/form-data with field name 'images' or 'image'",
       });
     }
 
