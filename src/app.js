@@ -68,7 +68,6 @@ app.use(cookieParser());
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons')));
 app.use(express.static(path.join(process.cwd(), 'public')));
-
 const MySQLStore = mysqlSession(session);
 const sessionStore = new MySQLStore({
   host: process.env.DB_HOST || 'localhost',

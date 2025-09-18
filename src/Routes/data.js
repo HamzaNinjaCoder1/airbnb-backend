@@ -58,7 +58,6 @@ dataRouter.post('/upload-images', (req, res, next) => {
   });
 }, uploadMultipleImages);
 dataRouter.post('/upload-image',  upload.single('image'), uploadMultipleImages);
-// Replace a single image of a listing
 dataRouter.put('/listings/:listingId/images/:imageId/replace', upload.single('image'), replaceListingImage);
 dataRouter.get('/listings/HostListingImages', getHostListingImages);
 dataRouter.delete('/listings/deletelisting', deletelisting);

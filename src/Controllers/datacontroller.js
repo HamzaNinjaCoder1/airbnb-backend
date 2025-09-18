@@ -460,7 +460,6 @@ export const getHostListingImages = async (req, res) => {
   }
 };
 
-// Replace a single listing image by imageId
 export const replaceListingImage = async (req, res) => {
   try {
     const listingId = parseInt(req.params.listingId);

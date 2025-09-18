@@ -2,8 +2,6 @@ import AppDataSource from "../config/db.js";
 import { usersmodule } from "../Models/usersmodule.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-
-
 const userRepo = AppDataSource.getRepository(usersmodule);
 const isProd = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-2024";
