@@ -58,19 +58,16 @@ dataRouter.post('/upload-images', (req, res, next) => {
   });
 }, uploadMultipleImages);
 dataRouter.post('/upload-image',  upload.single('image'), uploadMultipleImages);
-dataRouter.patch('/listings/:listingId/images/:imageId/replace', (req, res, next) => {
+// Replace a specific image of a listing
+dataRouter.put('/listings/:listingId/images/:imageId/replace', authMiddleware, (req, res, next) => {
   const handler = upload.single('image');
   handler(req, res, function (err) {
     if (err) {
       const isSize = err && (err.code === 'LIMIT_FILE_SIZE');
-      const isCount = err && (err.code === 'LIMIT_FILE_COUNT');
       const isType = /Only image files are allowed/i.test(err.message || '');
-      const detail = isSize ? 'File too large. Max 20MB each.' : isCount ? 'Too many files. Max 10.' : isType ? 'Unsupported file type.' : (err.message || String(err));
+      const detail = isSize ? 'File too large. Max 20MB each.' : isType ? 'Unsupported file type.' : (err.message || String(err));
       return res.status(400).json({ message: 'Image upload failed', detail });
     }
-    // sync params for controller expectations
-    req.params.imageId = req.params.imageId;
-    req.query.listingId = req.params.listingId;
     next();
   });
 }, replaceListingImage);

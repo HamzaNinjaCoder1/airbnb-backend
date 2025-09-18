@@ -404,74 +404,73 @@ export const uploadMultipleImages = async (req, res) => {
 
 export const replaceListingImage = async (req, res) => {
   try {
-    const imageId = parseInt(req.params.imageId);
-    const hostId = parseInt(req.query.hostId);
-    const listingId = parseInt(req.query.listingId);
+    const listingId = parseInt(req.params.listingId || req.query.listingId);
+    const imageId = parseInt(req.params.imageId || req.query.imageId);
+    const hostIdFromQuery = req.query.hostId ? parseInt(req.query.hostId) : undefined;
+    const currentUserId = req.user && req.user.id ? parseInt(req.user.id) : undefined;
 
-    if (isNaN(imageId)) {
-      return res.status(400).json({ message: "Valid imageId is required" });
-    }
     if (isNaN(listingId)) {
       return res.status(400).json({ message: "Valid listingId is required" });
     }
-
-    // Require one uploaded file named 'image'
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ message: "No image provided. Use field name 'image'" });
+    if (isNaN(imageId)) {
+      return res.status(400).json({ message: "Valid imageId is required" });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: "Image file is required (field name 'image')" });
     }
 
-    // Find the image row
-    const existingImage = await listingImageRepo.findOne({ where: { id: imageId } });
-    if (!existingImage) {
-      return res.status(404).json({ message: "Image not found" });
-    }
-    if (existingImage.listing_id !== listingId) {
-      return res.status(400).json({ message: "imageId does not belong to the provided listingId" });
+    const listing = await listingRepo.findOne({ where: { id: listingId } });
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
     }
 
-    // Optional host ownership check if hostId provided
-    if (!isNaN(hostId)) {
-      const listing = await listingRepo.findOne({ where: { id: listingId } });
-      if (!listing) {
-        return res.status(404).json({ message: "Listing not found" });
-      }
-      if (parseInt(listing.host_id) !== hostId) {
-        return res.status(403).json({ message: "You are not allowed to modify this listing's images" });
-      }
+    // Authorization: prefer JWT user if available; otherwise allow hostId via query for backward compat
+    if (currentUserId && listing.host_id !== currentUserId) {
+      return res.status(403).json({ message: "You are not authorized to modify this listing" });
+    }
+    if (!currentUserId && hostIdFromQuery && listing.host_id !== hostIdFromQuery) {
+      return res.status(403).json({ message: "Host mismatch for this listing" });
+    }
+
+    const imageRecord = await listingImageRepo.findOne({ where: { id: imageId, listing_id: listingId } });
+    if (!imageRecord) {
+      return res.status(404).json({ message: "Image not found for this listing" });
     }
 
     const uploadsDir = path.resolve('uploads');
-    const oldFilename = existingImage.image_url;
-    const newFilename = file.filename;
+    const oldFilename = imageRecord.image_url;
+    const newFilename = req.file.filename;
 
-    // Update DB first
-    existingImage.image_url = newFilename;
-    const saved = await listingImageRepo.save(existingImage);
+    // Update DB first to ensure consistency
+    imageRecord.image_url = newFilename;
+    const saved = await listingImageRepo.save(imageRecord);
 
-    // Delete old file from disk (best-effort)
-    if (oldFilename && oldFilename !== newFilename) {
+    // Best-effort delete old file
+    if (oldFilename) {
       const oldPath = path.join(uploadsDir, oldFilename);
-      fs.stat(oldPath, (err) => {
-        if (!err) {
+      fs.stat(oldPath, (err, stats) => {
+        if (!err && stats && stats.isFile()) {
           fs.unlink(oldPath, () => {});
         }
       });
     }
 
-    // Return updated list of images for the listing to allow immediate UI refresh
+    // Return updated images for the listing so frontend can refresh immediately
     const images = await listingImageRepo.find({ where: { listing_id: listingId } });
 
     return res.status(200).json({
+      success: true,
       message: "Image replaced successfully",
-      image: saved,
-      images,
+      listing_id: listingId,
+      updated_image: saved,
+      images
     });
   } catch (error) {
     console.error("Error replacing listing image:", error);
     return res.status(500).json({ message: "Failed to replace image", error: error.message });
   }
 };
+
 export const getHostListingImages = async (req, res) => {
   try {
     const hostId = parseInt(req.query.hostId);
