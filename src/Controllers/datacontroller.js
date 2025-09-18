@@ -337,7 +337,15 @@ export const uploadMultipleImages = async (req, res) => {
       return res.status(400).json({ message: "Valid listingId is required" });
     }
 
-    const images = req.files;
+    // Normalize files whether uploaded via fields (images/image) or array
+    let images = [];
+    if (Array.isArray(req.files)) {
+      images = req.files;
+    } else if (req.files && typeof req.files === 'object') {
+      const fromImages = Array.isArray(req.files.images) ? req.files.images : [];
+      const fromImage = Array.isArray(req.files.image) ? req.files.image : (req.files.image ? [req.files.image] : []);
+      images = [...fromImages, ...fromImage];
+    }
     console.log('[uploadMultipleImages] Files received', {
       filesProvided: Array.isArray(images),
       filesCount: Array.isArray(images) ? images.length : 0,

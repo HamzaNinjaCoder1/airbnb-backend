@@ -42,7 +42,10 @@ dataRouter.get('/test-db', async (req, res) => {
 
 dataRouter.patch("/listings/save-exit", saveAndUpdateListing);
 dataRouter.post('/upload-images', (req, res, next) => {
-  const handler = upload.array("images", 5);
+  const handler = upload.fields([
+    { name: 'images', maxCount: 5 },
+    { name: 'image', maxCount: 1 },
+  ]);
   handler(req, res, function (err) {
     if (err) {
       return res.status(400).json({
