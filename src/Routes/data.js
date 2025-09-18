@@ -71,6 +71,34 @@ dataRouter.put('/listings/:listingId/images/:imageId/replace', authMiddleware, (
     next();
   });
 }, replaceListingImage);
+
+// POST alias for environments that have issues with PUT + multipart
+dataRouter.post('/listings/:listingId/images/:imageId/replace', authMiddleware, (req, res, next) => {
+  const handler = upload.single('image');
+  handler(req, res, function (err) {
+    if (err) {
+      const isSize = err && (err.code === 'LIMIT_FILE_SIZE');
+      const isType = /Only image files are allowed/i.test(err.message || '');
+      const detail = isSize ? 'File too large. Max 20MB each.' : isType ? 'Unsupported file type.' : (err.message || String(err));
+      return res.status(400).json({ message: 'Image upload failed', detail });
+    }
+    next();
+  });
+}, replaceListingImage);
+
+// Body/query driven fallback: POST /listings/replace-image?listingId=...&imageId=...
+dataRouter.post('/listings/replace-image', authMiddleware, (req, res, next) => {
+  const handler = upload.single('image');
+  handler(req, res, function (err) {
+    if (err) {
+      const isSize = err && (err.code === 'LIMIT_FILE_SIZE');
+      const isType = /Only image files are allowed/i.test(err.message || '');
+      const detail = isSize ? 'File too large. Max 20MB each.' : isType ? 'Unsupported file type.' : (err.message || String(err));
+      return res.status(400).json({ message: 'Image upload failed', detail });
+    }
+    next();
+  });
+}, replaceListingImage);
 dataRouter.get('/listings/HostListingImages', getHostListingImages);
 dataRouter.delete('/listings/deletelisting', deletelisting);
 dataRouter.post('/messages/send-message', authMiddleware, sendMessage);
