@@ -100,16 +100,6 @@ app.use(
 app.use('/api/users', usersRouter);
 app.use('/api/data', dataRouter);
 
-// Log 404s after all routes
-app.use((req, res, next) => {
-  console.warn('[NOT_FOUND]', {
-    method: req.method,
-    url: req.originalUrl,
-    contentType: req.headers && req.headers['content-type']
-  });
-  return res.status(404).json({ success: false, message: 'Route not found' });
-});
-
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
 

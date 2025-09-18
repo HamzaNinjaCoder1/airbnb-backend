@@ -1,5 +1,7 @@
 
 import AppDataSource from '../config/db.js';
+import fs from 'fs';
+import path from 'path';
 import { listing_imagesmodule } from '../Models/listing_imagesmodule.js';
 import { listingsmodule } from '../Models/listingsmodule.js';
 import { headingsModule } from '../Models/headingmodule.js';
@@ -11,8 +13,6 @@ import { In } from 'typeorm';
 import { wishlistmodule } from '../Models/wishlistmodule.js';
 import { PushSubscription } from '../Models/PushSubscription.js';
 import webpush from 'web-push';
-import fs from 'fs';
-import path from 'path';
 
 // Repositories
 const listingRepo = AppDataSource.getRepository(listingsmodule);
@@ -402,85 +402,6 @@ export const uploadMultipleImages = async (req, res) => {
 };
 
 
-export const replaceListingImage = async (req, res) => {
-  try {
-    const listingId = parseInt(req.params.listingId || req.query.listingId);
-    const imageId = parseInt(req.params.imageId || req.query.imageId);
-    const hostIdFromQuery = req.query.hostId ? parseInt(req.query.hostId) : undefined;
-    const currentUserId = req.user && req.user.id ? parseInt(req.user.id) : undefined;
-
-    if (isNaN(listingId)) {
-      return res.status(400).json({ message: "Valid listingId is required" });
-    }
-    if (isNaN(imageId)) {
-      return res.status(400).json({ message: "Valid imageId is required" });
-    }
-    if (!req.file) {
-      return res.status(400).json({ message: "Image file is required (field name 'image')" });
-    }
-
-    const listing = await listingRepo.findOne({ where: { id: listingId } });
-    if (!listing) {
-      return res.status(404).json({ message: "Listing not found" });
-    }
-
-    // Authorization: prefer JWT user if available; otherwise allow hostId via query for backward compat
-    if (currentUserId && listing.host_id !== currentUserId) {
-      return res.status(403).json({ message: "You are not authorized to modify this listing" });
-    }
-    if (!currentUserId && hostIdFromQuery && listing.host_id !== hostIdFromQuery) {
-      return res.status(403).json({ message: "Host mismatch for this listing" });
-    }
-
-    const imageRecord = await listingImageRepo.findOne({ where: { id: imageId, listing_id: listingId } });
-    if (!imageRecord) {
-      return res.status(404).json({ message: "Image not found for this listing" });
-    }
-
-    const uploadsDir = path.resolve('uploads');
-    const oldFilename = imageRecord.image_url;
-    const newFilename = req.file.filename;
-
-    // Update DB first to ensure consistency
-    imageRecord.image_url = newFilename;
-    const saved = await listingImageRepo.save(imageRecord);
-
-    // Best-effort delete old file
-    if (oldFilename) {
-      const oldPath = path.join(uploadsDir, oldFilename);
-      fs.stat(oldPath, (err, stats) => {
-        if (!err && stats && stats.isFile()) {
-          fs.unlink(oldPath, () => {});
-        }
-      });
-    }
-
-    // Return updated images for the listing so frontend can refresh immediately
-    const images = await listingImageRepo.find({ where: { listing_id: listingId } });
-
-    return res.status(200).json({
-      success: true,
-      message: "Image replaced successfully",
-      listing_id: listingId,
-      updated_image: saved,
-      images
-    });
-  } catch (error) {
-    console.error("[replaceListingImage] Error", {
-      message: error && error.message,
-      stack: error && error.stack,
-      params: req.params,
-      query: req.query,
-      userId: req.user && req.user.id,
-      headers: {
-        origin: req.headers && req.headers['origin'],
-        contentType: req.headers && req.headers['content-type']
-      }
-    });
-    return res.status(500).json({ message: "Failed to replace image", error: error.message });
-  }
-};
-
 export const getHostListingImages = async (req, res) => {
   try {
     const hostId = parseInt(req.query.hostId);
@@ -536,6 +457,59 @@ export const getHostListingImages = async (req, res) => {
       message: "Failed to get host listing images",
       error: error.message,
     });
+  }
+};
+
+// Replace a single listing image by imageId
+export const replaceListingImage = async (req, res) => {
+  try {
+    const listingId = parseInt(req.params.listingId);
+    const imageId = parseInt(req.params.imageId);
+
+    if (isNaN(listingId) || isNaN(imageId)) {
+      return res.status(400).json({ message: "Valid listingId and imageId are required" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No image file provided. Use field name 'image'" });
+    }
+
+    // Ensure listing exists
+    const listing = await listingRepo.findOne({ where: { id: listingId }, relations: ['images'] });
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
+    }
+
+    // Ensure image exists and belongs to this listing
+    const imageRecord = await listingImageRepo.findOne({ where: { id: imageId, listing_id: listingId } });
+    if (!imageRecord) {
+      return res.status(404).json({ message: "Image not found for this listing" });
+    }
+
+    const uploadsDir = path.resolve('uploads');
+    const oldFilename = imageRecord.image_url;
+    const oldFilePath = path.resolve(uploadsDir, oldFilename || '');
+
+    // Update DB first to new filename
+    imageRecord.image_url = req.file.filename;
+    await listingImageRepo.save(imageRecord);
+
+    // Attempt to delete old file (best-effort)
+    try {
+      if (oldFilename && fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath);
+      }
+    } catch (err) {
+      // Log but don't fail the request
+      console.warn('[replaceListingImage] Failed to delete old file', { oldFilePath, error: err?.message });
+    }
+
+    // Return updated listing with images
+    const updated = await listingRepo.findOne({ where: { id: listingId }, relations: ['images'] });
+    return res.status(200).json({ message: 'Image replaced successfully', listing: updated });
+  } catch (error) {
+    console.error('Error replacing listing image:', error);
+    return res.status(500).json({ message: 'Failed to replace image', error: error.message });
   }
 };
 
