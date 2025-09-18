@@ -18,7 +18,7 @@ export const uploadSingleImage = async (file, listingId) => {
   formData.append('listing_id', listingId);
 
   try {
-    const response = await fetch('http://localhost:5000/api/data/upload-image', {
+    const response = await fetch('https://dynamic-tranquility-production.up.railway.app/api/data/upload-image', {
       method: 'POST',
       credentials: 'include',
       body: formData
@@ -44,7 +44,7 @@ export const uploadMultipleImages = async (files, listingId) => {
   formData.append('listing_id', listingId);
 
   try {
-    const response = await fetch('http://localhost:5000/api/data/upload-images', {
+    const response = await fetch('https://dynamic-tranquility-production.up.railway.app/api/data/upload-images', {
       method: 'POST',
       credentials: 'include',
       body: formData
@@ -66,7 +66,7 @@ export const uploadImageBase64 = async (file, listingId) => {
   try {
     const base64 = await fileToBase64(file);
     
-    const response = await fetch('http://localhost:5000/api/data/listingImage', {
+    const response = await fetch('https://dynamic-tranquility-production.up.railway.app/api/data/listingImage', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
