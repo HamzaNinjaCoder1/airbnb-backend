@@ -9,6 +9,19 @@ import { upload } from '../middleware/uploads.js';
 const listingRepo = AppDataSource.getRepository(listingsmodule);
 const bookingRepo = AppDataSource.getRepository(bookingmodule);
 const dataRouter = express.Router();
+// Log all /api/data requests entering this router
+dataRouter.use((req, res, next) => {
+  try {
+    console.log('[dataRouter] request', {
+      method: req.method,
+      path: req.path,
+      originalUrl: req.originalUrl,
+      contentType: req.headers && req.headers['content-type'],
+      hasAuth: !!(req.headers && req.headers['authorization'])
+    });
+  } catch (e) {}
+  next();
+});
 dataRouter.post('/listing', listing);
 dataRouter.post('/listingImage', listingImage);
 dataRouter.get('/listing', getListings);
