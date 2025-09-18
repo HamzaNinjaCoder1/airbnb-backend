@@ -466,7 +466,17 @@ export const replaceListingImage = async (req, res) => {
       images
     });
   } catch (error) {
-    console.error("Error replacing listing image:", error);
+    console.error("[replaceListingImage] Error", {
+      message: error && error.message,
+      stack: error && error.stack,
+      params: req.params,
+      query: req.query,
+      userId: req.user && req.user.id,
+      headers: {
+        origin: req.headers && req.headers['origin'],
+        contentType: req.headers && req.headers['content-type']
+      }
+    });
     return res.status(500).json({ message: "Failed to replace image", error: error.message });
   }
 };

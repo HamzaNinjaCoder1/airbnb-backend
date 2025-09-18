@@ -60,6 +60,15 @@ dataRouter.post('/upload-images', (req, res, next) => {
 dataRouter.post('/upload-image',  upload.single('image'), uploadMultipleImages);
 // Replace a specific image of a listing
 dataRouter.put('/listings/:listingId/images/:imageId/replace', authMiddleware, (req, res, next) => {
+  console.log('[replaceImage][PUT] incoming', {
+    path: req.path,
+    method: req.method,
+    params: req.params,
+    query: req.query,
+    contentType: req.headers['content-type'],
+    hasAuth: !!req.headers['authorization'],
+    origin: req.headers['origin']
+  });
   const handler = upload.single('image');
   handler(req, res, function (err) {
     if (err) {
@@ -68,12 +77,26 @@ dataRouter.put('/listings/:listingId/images/:imageId/replace', authMiddleware, (
       const detail = isSize ? 'File too large. Max 20MB each.' : isType ? 'Unsupported file type.' : (err.message || String(err));
       return res.status(400).json({ message: 'Image upload failed', detail });
     }
+    console.log('[replaceImage][PUT] file received', {
+      filePresent: !!req.file,
+      filename: req.file && req.file.filename,
+      size: req.file && req.file.size
+    });
     next();
   });
 }, replaceListingImage);
 
 // POST alias for environments that have issues with PUT + multipart
 dataRouter.post('/listings/:listingId/images/:imageId/replace', authMiddleware, (req, res, next) => {
+  console.log('[replaceImage][POST alias] incoming', {
+    path: req.path,
+    method: req.method,
+    params: req.params,
+    query: req.query,
+    contentType: req.headers['content-type'],
+    hasAuth: !!req.headers['authorization'],
+    origin: req.headers['origin']
+  });
   const handler = upload.single('image');
   handler(req, res, function (err) {
     if (err) {
@@ -82,12 +105,27 @@ dataRouter.post('/listings/:listingId/images/:imageId/replace', authMiddleware, 
       const detail = isSize ? 'File too large. Max 20MB each.' : isType ? 'Unsupported file type.' : (err.message || String(err));
       return res.status(400).json({ message: 'Image upload failed', detail });
     }
+    console.log('[replaceImage][POST alias] file received', {
+      filePresent: !!req.file,
+      filename: req.file && req.file.filename,
+      size: req.file && req.file.size
+    });
     next();
   });
 }, replaceListingImage);
 
 // Body/query driven fallback: POST /listings/replace-image?listingId=...&imageId=...
 dataRouter.post('/listings/replace-image', authMiddleware, (req, res, next) => {
+  console.log('[replaceImage][POST fallback] incoming', {
+    path: req.path,
+    method: req.method,
+    params: req.params,
+    query: req.query,
+    body: req.body && Object.keys(req.body),
+    contentType: req.headers['content-type'],
+    hasAuth: !!req.headers['authorization'],
+    origin: req.headers['origin']
+  });
   const handler = upload.single('image');
   handler(req, res, function (err) {
     if (err) {
@@ -96,9 +134,23 @@ dataRouter.post('/listings/replace-image', authMiddleware, (req, res, next) => {
       const detail = isSize ? 'File too large. Max 20MB each.' : isType ? 'Unsupported file type.' : (err.message || String(err));
       return res.status(400).json({ message: 'Image upload failed', detail });
     }
+    console.log('[replaceImage][POST fallback] file received', {
+      filePresent: !!req.file,
+      filename: req.file && req.file.filename,
+      size: req.file && req.file.size
+    });
     next();
   });
 }, replaceListingImage);
+
+// Lightweight debug to confirm router is mounted in prod
+dataRouter.get('/_debug/replace-route/:listingId/:imageId', (req, res) => {
+  res.status(200).json({
+    ok: true,
+    message: 'Replace route namespace is mounted',
+    params: req.params
+  });
+});
 dataRouter.get('/listings/HostListingImages', getHostListingImages);
 dataRouter.delete('/listings/deletelisting', deletelisting);
 dataRouter.post('/messages/send-message', authMiddleware, sendMessage);
