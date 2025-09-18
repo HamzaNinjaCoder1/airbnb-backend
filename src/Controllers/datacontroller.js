@@ -547,7 +547,12 @@ export const sendMessage = async (req, res) => {
         body: message,
         icon: iconUrl,
         badge: badgeUrl,
-        data: { conversation_id: parseInt(conversation_id), sender_id: senderId, messageId: savedMessage.id }
+        data: { 
+          conversation_id: parseInt(conversation_id), 
+          sender_id: senderId, 
+          messageId: savedMessage.id,
+          url: `https://airbnb-frontend-sooty.vercel.app/messages?conversationId=${parseInt(conversation_id)}`
+        }
       });
 
       for (const sub of subscriptions) {
@@ -825,7 +830,8 @@ export const sendBookingNotification = async (guestId, listingId, io, options = 
           messageId: newMessage.id, 
           bookingId: options.bookingId, 
           type: "booking",
-          listingId: parsedListingId
+          listingId: parsedListingId,
+          url: `https://airbnb-frontend-sooty.vercel.app/messages?conversationId=${conversation.id}`
         }
       });
 
