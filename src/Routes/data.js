@@ -1,5 +1,5 @@
 import express from 'express';
-import {listing, listingImage, getListings, getListingsByCity, saveHeading, getHeadingsGrouped, checkOrCreateHostListing, saveAndUpdateListing, uploadMultipleImages, getHostListingImages, deletelisting, sendMessage, getMessages, getConversationsByUserId, savePushSubscription, unsubscribe, confirmBooking, addToWishlist, removeFromWishlist, getUserWishlist, deleteListingImage, replaceListingImage} from '../Controllers/datacontroller.js';
+import {listing, listingImage, getListings, getListingsByCity, saveHeading, getHeadingsGrouped, checkOrCreateHostListing, saveAndUpdateListing, uploadMultipleImages, getHostListingImages, deletelisting, sendMessage, getMessages, getConversationsByUserId, savePushSubscription, unsubscribe, confirmBooking, addToWishlist, removeFromWishlist, getUserWishlist, replaceListingImage} from '../Controllers/datacontroller.js';
 import { authMiddleware } from '../middleware/authmiddleware.js';
 import AppDataSource from '../config/db.js';
 import { listingsmodule } from '../Models/listingsmodule.js';
@@ -58,21 +58,19 @@ dataRouter.post('/upload-images', (req, res, next) => {
   });
 }, uploadMultipleImages);
 dataRouter.post('/upload-image',  upload.single('image'), uploadMultipleImages);
-// Delete a specific image (by filename) for a listing
-dataRouter.delete('/listing-image', deleteListingImage);
-// Replace a specific image (oldFilename) with a new uploaded file
-dataRouter.post('/listing-image/replace', (req, res, next) => {
-  const handler = upload.fields([
-    { name: 'image', maxCount: 1 },
-    { name: 'images', maxCount: 1 },
-  ]);
+dataRouter.patch('/listings/:listingId/images/:imageId/replace', (req, res, next) => {
+  const handler = upload.single('image');
   handler(req, res, function (err) {
     if (err) {
       const isSize = err && (err.code === 'LIMIT_FILE_SIZE');
+      const isCount = err && (err.code === 'LIMIT_FILE_COUNT');
       const isType = /Only image files are allowed/i.test(err.message || '');
-      const detail = isSize ? 'File too large. Max 20MB.' : isType ? 'Unsupported file type.' : (err.message || String(err));
+      const detail = isSize ? 'File too large. Max 20MB each.' : isCount ? 'Too many files. Max 10.' : isType ? 'Unsupported file type.' : (err.message || String(err));
       return res.status(400).json({ message: 'Image upload failed', detail });
     }
+    // sync params for controller expectations
+    req.params.imageId = req.params.imageId;
+    req.query.listingId = req.params.listingId;
     next();
   });
 }, replaceListingImage);
