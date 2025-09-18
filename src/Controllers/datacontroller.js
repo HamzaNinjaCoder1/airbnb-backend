@@ -542,6 +542,7 @@ export const sendMessage = async (req, res) => {
       const senderName = req.user.name || req.user.first_name || "Someone";
       const iconUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
       const badgeUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
+      const clientOrigin = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
       const payload = JSON.stringify({
         title: `New message from ${senderName}`,
         body: message,
@@ -551,7 +552,7 @@ export const sendMessage = async (req, res) => {
           conversation_id: parseInt(conversation_id), 
           sender_id: senderId, 
           messageId: savedMessage.id,
-          url: `https://airbnb-frontend-sooty.vercel.app/messages?conversationId=${parseInt(conversation_id)}`
+          url: `${clientOrigin}/messages?conversationId=${parseInt(conversation_id)}`
         }
       });
 
@@ -819,6 +820,7 @@ export const sendBookingNotification = async (guestId, listingId, io, options = 
     if (subscriptions.length > 0) {
       const iconUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
       const badgeUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
+      const clientOrigin = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
       const payload = JSON.stringify({
         title: `New booking for ${listing.title}`,
         body: messageText,
@@ -831,7 +833,7 @@ export const sendBookingNotification = async (guestId, listingId, io, options = 
           bookingId: options.bookingId, 
           type: "booking",
           listingId: parsedListingId,
-          url: `https://airbnb-frontend-sooty.vercel.app/messages?conversationId=${conversation.id}`
+          url: `${clientOrigin}/messages?conversationId=${conversation.id}`
         }
       });
 
