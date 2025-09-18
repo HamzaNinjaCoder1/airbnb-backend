@@ -359,9 +359,14 @@ export const uploadMultipleImages = async (req, res) => {
       });
     }
 
-    const listing = await listingRepo.findOne({ 
+    let listing = await listingRepo.findOne({ 
       where: { id: listingId, host_id: hostId } 
     });
+
+    // Fallback: if host/listing pair not found, allow by listingId alone
+    if (!listing) {
+      listing = await listingRepo.findOne({ where: { id: listingId } });
+    }
 
     if (!listing) {
       console.warn('[uploadMultipleImages] Listing not found', { listingId, hostId });

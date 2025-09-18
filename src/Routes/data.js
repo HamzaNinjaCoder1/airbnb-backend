@@ -48,10 +48,11 @@ dataRouter.post('/upload-images', (req, res, next) => {
   ]);
   handler(req, res, function (err) {
     if (err) {
-      return res.status(400).json({
-        message: 'Image upload failed',
-        error: err.message || String(err),
-      });
+      const isSize = err && (err.code === 'LIMIT_FILE_SIZE');
+      const isCount = err && (err.code === 'LIMIT_FILE_COUNT');
+      const isType = /Only image files are allowed/i.test(err.message || '');
+      const detail = isSize ? 'File too large. Max 20MB each.' : isCount ? 'Too many files. Max 10.' : isType ? 'Unsupported file type.' : (err.message || String(err));
+      return res.status(400).json({ message: 'Image upload failed', detail });
     }
     next();
   });
