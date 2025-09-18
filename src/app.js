@@ -65,7 +65,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons')));
 app.use(express.static(path.join(process.cwd(), 'public')));
 
