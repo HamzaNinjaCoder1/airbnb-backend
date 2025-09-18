@@ -11,6 +11,8 @@ import { In } from 'typeorm';
 import { wishlistmodule } from '../Models/wishlistmodule.js';
 import { PushSubscription } from '../Models/PushSubscription.js';
 import webpush from 'web-push';
+import path from 'path';
+import fs from 'fs';
 
 // Repositories
 const listingRepo = AppDataSource.getRepository(listingsmodule);
@@ -400,6 +402,103 @@ export const uploadMultipleImages = async (req, res) => {
       message: "Failed to upload images",
       error: error.message,
     });
+  }
+};
+
+
+// Delete a specific image by filename for a listing (and remove file from disk)
+export const deleteListingImage = async (req, res) => {
+  try {
+    const hostId = parseInt(req.query.hostId);
+    const listingId = parseInt(req.query.listingId);
+    const filename = String(req.query.filename || '').trim();
+
+    if (isNaN(hostId) || isNaN(listingId) || !filename) {
+      return res.status(400).json({ message: 'hostId, listingId and filename are required' });
+    }
+
+    const listing = await listingRepo.findOne({ where: { id: listingId } });
+    if (!listing) {
+      return res.status(404).json({ message: 'Listing not found' });
+    }
+    if (listing.host_id !== hostId) {
+      return res.status(403).json({ message: 'Not allowed to modify this listing' });
+    }
+
+    const existing = await listingImageRepo.findOne({ where: { listing_id: listingId, image_url: filename } });
+    if (!existing) {
+      return res.status(404).json({ message: 'Image not found for this listing' });
+    }
+
+    // Remove DB row first
+    await listingImageRepo.remove(existing);
+
+    // Then try to remove file from disk (best effort)
+    try {
+      const uploadsDir = path.resolve('uploads');
+      const safePath = path.join(uploadsDir, path.basename(filename));
+      if (safePath.startsWith(uploadsDir)) {
+        fs.existsSync(safePath) && fs.unlinkSync(safePath);
+      }
+    } catch (e) {
+      console.warn('Failed to delete file from disk:', e.message);
+    }
+
+    return res.status(200).json({ success: true, message: 'Image deleted' });
+  } catch (error) {
+    console.error('Error deleting listing image:', error);
+    return res.status(500).json({ message: 'Failed to delete image', error: error.message });
+  }
+};
+
+// Replace a specific image with a newly uploaded file
+export const replaceListingImage = async (req, res) => {
+  try {
+    const hostId = parseInt(req.query.hostId);
+    const listingId = parseInt(req.query.listingId);
+    const oldFilename = String(req.query.oldFilename || '').trim();
+
+    if (isNaN(hostId) || isNaN(listingId) || !oldFilename) {
+      return res.status(400).json({ message: 'hostId, listingId and oldFilename are required' });
+    }
+
+    // Normalize uploaded file
+    let file = null;
+    if (req.file) file = req.file;
+    else if (Array.isArray(req.files)) file = req.files[0] || null;
+    else if (req.files && req.files.image) file = Array.isArray(req.files.image) ? req.files.image[0] : req.files.image;
+    else if (req.files && req.files.images) file = Array.isArray(req.files.images) ? req.files.images[0] : req.files.images;
+
+    if (!file) {
+      return res.status(400).json({ message: 'No replacement image provided' });
+    }
+
+    const listing = await listingRepo.findOne({ where: { id: listingId } });
+    if (!listing) return res.status(404).json({ message: 'Listing not found' });
+    if (listing.host_id !== hostId) return res.status(403).json({ message: 'Not allowed to modify this listing' });
+
+    const existing = await listingImageRepo.findOne({ where: { listing_id: listingId, image_url: oldFilename } });
+    if (!existing) return res.status(404).json({ message: 'Old image not found on this listing' });
+
+    // Create DB row for new file
+    const newImg = await listingImageRepo.save(listingImageRepo.create({ listing_id: listingId, image_url: file.filename }));
+
+    // Remove old row and try to delete file
+    await listingImageRepo.remove(existing);
+    try {
+      const uploadsDir = path.resolve('uploads');
+      const safePath = path.join(uploadsDir, path.basename(oldFilename));
+      if (safePath.startsWith(uploadsDir)) {
+        fs.existsSync(safePath) && fs.unlinkSync(safePath);
+      }
+    } catch (e) {
+      console.warn('Failed to delete old file from disk:', e.message);
+    }
+
+    return res.status(200).json({ success: true, message: 'Image replaced', image: { listing_id: listingId, image_url: newImg.image_url } });
+  } catch (error) {
+    console.error('Error replacing listing image:', error);
+    return res.status(500).json({ message: 'Failed to replace image', error: error.message });
   }
 };
 
