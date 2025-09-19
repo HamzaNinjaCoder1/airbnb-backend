@@ -1,3 +1,248 @@
+## Production Push Notifications Guide (Web Push)
+
+This guide explains exactly what is already implemented in the backend and everything the frontend must do to enable browser push notifications in production.
+
+### Summary
+- Backend uses VAPID Web Push with `web-push` and TypeORM to store browser push subscriptions per user.
+- Push sending is strictly production-only and requires HTTPS origins.
+- Frontend must: register a service worker, request notification permission, subscribe to push with the public VAPID key, send the subscription to the backend, and optionally trigger booking notifications. Message notifications are sent automatically by the backend when messages are created.
+
+---
+
+### Backend: What is already implemented
+
+1) VAPID configuration and sending
+- File: `src/services/NotificationService.js`
+- Function: `sendNotificationToUser(userId, payload)`
+  - Sends Web Push to all valid HTTPS subscriptions for a user.
+  - Disabled unless `NODE_ENV === 'production'`.
+  - Requires `SERVER_ORIGIN` or `SERVER_PUBLIC_URL` to be an `https://` URL.
+  - Filters out non-HTTPS and `localhost` endpoints.
+  - Payload shape used by service worker:
+    ```json
+    {
+      "title": "Notification",
+      "body": "...",
+      "data": { "kind": "generic", "url": "<CLIENT_ORIGIN>/messages", ... },
+      "icon": "/icons/notification.svg",
+      "badge": "/icons/notification.svg"
+    }
+    ```
+
+2) Push subscription storage
+- File: `src/Models/PushSubscription.js`
+- Table: `push_subscriptions`
+- Columns: `id`, `user_id`, `endpoint` (unique, HTTPS), `p256dh`, `auth`, `created_at`.
+
+3) REST endpoints used by the frontend
+- Router: `src/Routes/data.js` (mounted at `/api/data` in `src/app.js`)
+- Auth: Cookie session-based; send requests with credentials.
+- Endpoints:
+  - `POST /api/data/subscribe` (auth required)
+    - Controller: `savePushSubscription`
+    - Body: `{ subscription }` (standard Push API subscription object)
+    - Upserts by `endpoint` and binds to the current authenticated `user_id`.
+    - Validation: rejects non-HTTPS endpoints; rejects localhost endpoints in production.
+  - `POST /api/data/unsubscribe`
+    - Controller: `unsubscribe`
+    - Body: `{ endpoint }`
+    - Deletes a stored subscription by endpoint.
+  - `POST /api/data/notifications/send-booking` (auth required)
+    - Controller: `sendBookingNotificationToHost`
+    - Body (minimal): `{ hostId: number, listingId: number, title?: string, body?: string, data?: object }`
+    - Validates that `listingId` belongs to `hostId` and sends a push to the host.
+  - `POST /api/data/messages/send-message` (auth required)
+    - Controller: `sendMessage`
+    - Automatically sends a push to the `receiver_id` after saving the message (no frontend trigger required).
+
+4) Static assets for icons
+- `public/icons/notification.svg` is served at `/icons/notification.svg` by the backend for default icon/badge.
+- You can override with `NOTIFICATION_ICON_URL` env var if desired.
+
+5) Required backend environment variables
+- `NODE_ENV=production` (push sending disabled otherwise)
+- `SERVER_ORIGIN=https://your-backend-domain` (or `SERVER_PUBLIC_URL`)
+- `CLIENT_ORIGIN=https://your-frontend-domain` (used to build default URL in payload)
+- `VAPID_PUBLIC_KEY=...` (Base64 URL-safe string)
+- `VAPID_PRIVATE_KEY=...`
+- `VAPID_EMAIL=mailto:you@example.com` (or `VAPID_CONTACT`)
+- Optional: `NOTIFICATION_ICON_URL=https://.../icons/notification.svg`
+
+---
+
+### Frontend: Everything required
+
+1) Frontend environment variables
+- Public VAPID key exposed to the browser (example for Next.js):
+  - `NEXT_PUBLIC_VAPID_PUBLIC_KEY=BP0OJzfIv3gutn2bu2VbP3Y062ZYRhtLNiYxxDe_OM1aueh7bJKcx5S72UzsRs40kFsukwOxfV13oTUJo-3vOFU`
+- Backend origin for API calls:
+  - `NEXT_PUBLIC_API_URL=https://your-backend-domain`
+
+2) Host a notification icon on the frontend (recommended)
+- Place the icon at `/public/icons/notification.svg` so it is served from `https://your-frontend-domain/icons/notification.svg`.
+- This aligns with the backend default `icon`/`badge` values.
+
+3) Create a service worker at the site root (e.g., `/sw.js`)
+- The service worker must be at the root scope to receive pushes for the app.
+- Implement push display and click handling:
+```javascript
+// sw.js
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) {}
+
+  const title = data.title || 'Notification';
+  const body = data.body || '';
+  const icon = data.icon || '/icons/notification.svg';
+  const badge = data.badge || '/icons/notification.svg';
+
+  const options = {
+    body,
+    icon,
+    badge,
+    data: data.data || {},
+    tag: (data.data && data.data.kind) || 'generic',
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/messages';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
+      const client = clientsArr.find(c => c.url.includes(url) || c.visibilityState === 'visible');
+      if (client) { client.focus(); client.navigate(url); return; }
+      return clients.openWindow(url);
+    })
+  );
+});
+```
+
+4) Register the service worker, request permission, subscribe to push, and send subscription to backend
+- Include after user login or behind a settings toggle.
+- Always send requests with credentials (cookies) because backend uses sessions.
+```javascript
+// pushSetup.js
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; ++i) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
+export async function enablePushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error('Push not supported in this browser');
+  }
+  if (!VAPID_PUBLIC_KEY) {
+    throw new Error('Missing VAPID public key');
+  }
+
+  const registration = await navigator.serviceWorker.register('/sw.js');
+
+  let permission = Notification.permission;
+  if (permission === 'default') permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('Notification permission not granted');
+
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+
+  const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/data/subscribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ subscription }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to save subscription');
+  }
+  return true;
+}
+```
+
+5) Unsubscribe flow
+- Also remove on the server to keep storage clean.
+```javascript
+export async function disablePushNotifications() {
+  const registration = await navigator.serviceWorker.getRegistration();
+  const subscription = await registration?.pushManager.getSubscription();
+  if (subscription) {
+    const endpoint = subscription.endpoint;
+    await subscription.unsubscribe().catch(() => {});
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/data/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ endpoint }),
+    }).catch(() => {});
+  }
+}
+```
+
+6) Triggering notifications (when initiated from frontend)
+- Messages: No action required; backend triggers push on `POST /api/data/messages/send-message`.
+- Bookings: Optional explicit trigger to notify host.
+```javascript
+await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/data/notifications/send-booking`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  credentials: 'include',
+  body: JSON.stringify({
+    hostId,            // required: number
+    listingId,         // required: number
+    title: 'New Booking Confirmed!',
+    body: 'A new booking was made.',
+    data: {
+      check_in: '2025-10-01',
+      check_out: '2025-10-05',
+      guests: 2,
+      url: `${window.location.origin}/messages`,
+    },
+  }),
+});
+```
+
+7) Frontend UX and production requirements
+- Permission handling: If denied, show how to enable in browser settings.
+- Idempotency: Backend upserts by endpoint; re-subscribing then posting again is safe.
+- Cookies: Always set `credentials: 'include'` on fetch because server uses sessions.
+- HTTPS only: Browsers and backend both require HTTPS for push endpoints in production.
+- Development note: Server will not send actual pushes unless `NODE_ENV=production`. You can still test subscription and service worker, but you won’t receive pushes from the backend in development.
+
+---
+
+### Quick checklist (Frontend)
+- Expose `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and `NEXT_PUBLIC_API_URL`.
+- Serve `/icons/notification.svg` from your frontend.
+- Add `/sw.js` with `push` and `notificationclick` handlers.
+- After login, call `enablePushNotifications()` to register, request permission, subscribe, and POST to `/api/data/subscribe` with credentials.
+- Optionally implement `disablePushNotifications()` to clean up both browser and server.
+- To notify hosts about bookings from the UI, call `/api/data/notifications/send-booking` as shown.
+
+---
+
+### Quick checklist (Backend already done)
+- VAPID keys integration with `web-push`.
+- Subscription persistence in `push_subscriptions`.
+- Endpoints: `/subscribe`, `/unsubscribe`, `/notifications/send-booking`, and auto-send on `/messages/send-message`.
+- HTTPS/production enforcement and localhost endpoint filtering.
+- Default icon/badge at `/icons/notification.svg`.
+
+---
+
+If you follow the steps above on a production HTTPS domain for both frontend and backend, users will receive push notifications reliably for messages (automatic) and bookings (on demand).
+
 -----  Steps to Create Database with the help of the "TypeORM" ----------
 1) -> install necessary dependicies as like 
        "npm install mysql2 typeorm reflect-metadata dotenv"

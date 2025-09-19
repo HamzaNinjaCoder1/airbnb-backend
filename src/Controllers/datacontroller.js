@@ -964,8 +964,6 @@ export const sendBookingNotificationToHost = async (req, res) => {
     console.log('📩 /notifications/send-booking payload:', req.body);
     const { guestId, hostId, listingId, bookingId, message, title, body, data, subscription } = req.body || {};
     const currentUserId = parseInt(req.user.id);
-    
-    // Validate required fields
     if (!hostId || !listingId) {
       return res.status(400).json({ 
         success: false, 
