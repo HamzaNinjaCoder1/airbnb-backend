@@ -728,93 +728,211 @@ export const savePushSubscription = async (req, res) => {
     const { subscription } = req.body;
     const user_id = parseInt(req.user?.id);
 
-    if (!subscription || typeof subscription !== 'object') return res.status(400).json({ success: false, message: "Invalid subscription payload" });
-    if (!user_id) return res.status(401).json({ success: false, message: "Unauthorized" });
-
-    const { endpoint, keys } = subscription || {};
-    if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ success: false, message: "endpoint, p256dh, and auth are required" });
-
-    const isProd = process.env.NODE_ENV === 'production';
-    if (isProd && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(endpoint)) {
-      return res.status(400).json({ success: false, message: "Localhost push endpoint not allowed in production" });
+    // Enhanced validation
+    if (!subscription || typeof subscription !== 'object') {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid subscription payload" 
+      });
+    }
+    
+    if (!user_id) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized - user not authenticated" 
+      });
     }
 
+    const { endpoint, keys } = subscription || {};
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "endpoint, p256dh, and auth are required" 
+      });
+    }
+
+    // Production validation - reject localhost endpoints
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(endpoint)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Localhost push endpoint not allowed in production" 
+      });
+    }
+
+    // Validate endpoint format
+    if (!endpoint.startsWith('https://')) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid endpoint format - must be HTTPS" 
+      });
+    }
+
+    // Check for existing subscription
     const existing = await pushSubRepo.findOne({ where: { endpoint } });
+    
     if (existing) {
+      // Update existing subscription
       existing.p256dh = keys.p256dh;
       existing.auth = keys.auth;
       existing.user_id = user_id;
       await pushSubRepo.save(existing);
-      return res.status(200).json({ success: true, message: "Push subscription updated" });
+      console.log(`✅ Updated push subscription for user ${user_id}`);
+      return res.status(200).json({ 
+        success: true, 
+        message: "Push subscription updated successfully" 
+      });
     }
 
-    await pushSubRepo.save({ endpoint, p256dh: keys.p256dh, auth: keys.auth, user_id });
-    return res.status(201).json({ success: true, message: "Push subscription created" });
+    // Create new subscription
+    await pushSubRepo.save({ 
+      endpoint, 
+      p256dh: keys.p256dh, 
+      auth: keys.auth, 
+      user_id 
+    });
+    
+    console.log(`✅ Created new push subscription for user ${user_id}`);
+    return res.status(201).json({ 
+      success: true, 
+      message: "Push subscription created successfully" 
+    });
   } catch (error) {
-    console.error("Error saving push subscription:", error);
-    return res.status(500).json({ success: false, message: "Failed to save push subscription", error: error.message });
+    console.error("❌ Error saving push subscription:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to save push subscription", 
+      error: error.message 
+    });
   }
 };
 
 export const unsubscribe = async (req, res) => {
   try {
     const { endpoint } = req.body;
+    
+    if (!endpoint) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Endpoint is required" 
+      });
+    }
+
     const existing = await pushSubRepo.findOne({ where: { endpoint } });
 
-    if (!existing) return res.status(404).json({ success: false, message: "Push subscription not found" });
+    if (!existing) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Push subscription not found" 
+      });
+    }
 
     await pushSubRepo.delete({ id: existing.id });
-    return res.status(200).json({ success: true, message: "Push subscription deleted successfully" });
+    console.log(`✅ Deleted push subscription for endpoint: ${endpoint.substring(0, 50)}...`);
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: "Push subscription deleted successfully" 
+    });
   } catch (error) {
-    console.error("Error deleting push subscription:", error);
-    return res.status(500).json({ success: false, message: "Failed to delete push subscription", error: error.message });
+    console.error("❌ Error deleting push subscription:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to delete push subscription", 
+      error: error.message 
+    });
   }
 };
 
-// Helper function to send push notifications
+// Enhanced push notification service for production
 const sendPushNotification = async (userId, title, body, data = {}) => {
   try {
     const subscriptions = await pushSubRepo.find({ where: { user_id: userId } });
     if (subscriptions.length === 0) {
-      console.log(`No push subscriptions found for user ${userId}`);
+      console.log(`📱 No push subscriptions found for user ${userId}`);
       return { success: false, message: "No subscriptions found" };
     }
 
-    const iconUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
-    const badgeUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
+    // Production-ready notification payload
     const payload = JSON.stringify({
       title,
       body,
-      icon: iconUrl,
-      badge: badgeUrl,
-      data: { ...data, timestamp: Date.now() }
+      icon: 'https://airbnb-frontend-sooty.vercel.app/icons/notification.svg',
+      badge: 'https://airbnb-frontend-sooty.vercel.app/icons/notification.svg',
+      data: { 
+        ...data, 
+        timestamp: Date.now(),
+        url: 'https://airbnb-frontend-sooty.vercel.app/messages'
+      },
+      actions: [
+        {
+          action: 'view',
+          title: 'View Details'
+        },
+        {
+          action: 'dismiss',
+          title: 'Dismiss'
+        }
+      ],
+      requireInteraction: true,
+      silent: false
     });
 
-    let successCount = 0;
-    const filteredSubs = process.env.NODE_ENV === 'production' 
+    // Filter subscriptions for production
+    const isProd = process.env.NODE_ENV === 'production';
+    const filteredSubs = isProd 
       ? subscriptions.filter(s => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(s.endpoint))
       : subscriptions;
 
+    if (filteredSubs.length === 0) {
+      console.log(`📱 No valid subscriptions for user ${userId} in ${isProd ? 'production' : 'development'} mode`);
+      return { success: false, message: "No valid subscriptions found" };
+    }
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    // Send notifications to all valid subscriptions
     for (const sub of filteredSubs) {
       try {
         await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          { 
+            endpoint: sub.endpoint, 
+            keys: { p256dh: sub.p256dh, auth: sub.auth } 
+          },
           payload,
-          { TTL: 86400 }
+          { 
+            TTL: 86400, // 24 hours
+            urgency: 'high',
+            topic: 'booking-notification'
+          }
         );
         successCount++;
+        console.log(`✅ Push notification sent to user ${userId} via ${sub.endpoint.substring(0, 50)}...`);
       } catch (err) {
-        console.error(`Push notification failed for user ${userId}:`, err);
+        failureCount++;
+        console.error(`❌ Push notification failed for user ${userId}:`, err.message);
+        
+        // Remove invalid subscriptions
         if (err.statusCode === 410 || err.statusCode === 404) {
           await pushSubRepo.delete({ id: sub.id });
-          console.log(`Removed invalid push subscription for user ${userId}`);
+          console.log(`🗑️ Removed invalid push subscription for user ${userId}`);
         }
       }
     }
 
-    return { success: successCount > 0, message: `Sent to ${successCount}/${subscriptions.length} subscriptions` };
+    const result = { 
+      success: successCount > 0, 
+      message: `Sent to ${successCount}/${filteredSubs.length} subscriptions`,
+      successCount,
+      failureCount,
+      totalSubscriptions: filteredSubs.length
+    };
+
+    console.log(`📊 Notification summary for user ${userId}:`, result);
+    return result;
   } catch (error) {
-    console.error("Error in sendPushNotification:", error);
+    console.error("❌ Error in sendPushNotification:", error);
     return { success: false, message: error.message };
   }
 };
@@ -1085,5 +1203,88 @@ export const getUserWishlist = async (req, res) => {
     return res.status(200).json({ success: true, message: "Wishlist fetched", data: result });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Failed to fetch wishlist", error: error.message });
+  }
+};
+
+// Production-ready booking notification endpoint for frontend integration
+export const sendBookingNotificationToHost = async (req, res) => {
+  try {
+    const { guestId, hostId, listingId, bookingId, message, title, body, data } = req.body;
+    const currentUserId = parseInt(req.user.id);
+    
+    // Validate required fields
+    if (!hostId || !listingId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "hostId and listingId are required" 
+      });
+    }
+    
+    const parsedHostId = parseInt(hostId);
+    const parsedListingId = parseInt(listingId);
+    
+    // Get listing details for validation
+    const listing = await listingRepo.findOne({ where: { id: parsedListingId } });
+    if (!listing) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Listing not found" 
+      });
+    }
+    
+    // Verify the hostId matches the listing's host
+    if (listing.host_id !== parsedHostId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Host ID does not match listing owner" 
+      });
+    }
+    
+    // Prepare notification data
+    const notificationData = {
+      type: "booking_confirmation",
+      listing_id: parsedListingId,
+      listing_title: listing.title,
+      host_id: parsedHostId,
+      booking_id: bookingId || 'manual-notification',
+      check_in: data?.check_in || 'TBD',
+      check_out: data?.check_out || 'TBD',
+      guests: data?.guests || 'TBD',
+      ...data
+    };
+    
+    // Send push notification using enhanced service
+    const result = await sendPushNotification(
+      parsedHostId,
+      title || "New Booking Confirmed!",
+      body || `A new booking has been made for your listing "${listing.title}".`,
+      notificationData
+    );
+    
+    if (result.success) {
+      return res.status(200).json({ 
+        success: true, 
+        message: "Notification sent successfully",
+        data: {
+          hostId: parsedHostId,
+          listingId: parsedListingId,
+          notificationResult: result
+        }
+      });
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Failed to send notification",
+        error: result.message 
+      });
+    }
+    
+  } catch (error) {
+    console.error("❌ Error sending booking notification:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to send notification", 
+      error: error.message 
+    });
   }
 };

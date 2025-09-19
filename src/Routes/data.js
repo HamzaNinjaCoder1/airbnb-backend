@@ -1,5 +1,5 @@
 import express from 'express';
-import {listing, listingImage, getListings, getListingsByCity, saveHeading, getHeadingsGrouped, checkOrCreateHostListing, saveAndUpdateListing, uploadMultipleImages, getHostListingImages, deletelisting, sendMessage, getMessages, getConversationsByUserId, savePushSubscription, unsubscribe, confirmBooking, addToWishlist, removeFromWishlist, getUserWishlist, replaceListingImage} from '../Controllers/datacontroller.js';
+import {listing, listingImage, getListings, getListingsByCity, saveHeading, getHeadingsGrouped, checkOrCreateHostListing, saveAndUpdateListing, uploadMultipleImages, getHostListingImages, deletelisting, sendMessage, getMessages, getConversationsByUserId, savePushSubscription, unsubscribe, confirmBooking, addToWishlist, removeFromWishlist, getUserWishlist, replaceListingImage, sendBookingNotificationToHost} from '../Controllers/datacontroller.js';
 import { authMiddleware } from '../middleware/authmiddleware.js';
 import AppDataSource from '../config/db.js';
 import { listingsmodule } from '../Models/listingsmodule.js';
@@ -219,8 +219,11 @@ dataRouter.get('/push-subscriptions/:userId', authMiddleware, async (req, res) =
   }
 });
 
-// Send booking notification endpoint
-dataRouter.post('/notifications/send-booking', authMiddleware, async (req, res) => {
+// Production-ready booking notification endpoint (matches frontend requirements)
+dataRouter.post('/notifications/send-booking', authMiddleware, sendBookingNotificationToHost);
+
+// Legacy booking notification endpoint (for backward compatibility)
+dataRouter.post('/notifications/send-booking-legacy', authMiddleware, async (req, res) => {
   try {
     const { guestId, listingId, bookingId, message } = req.body;
     const currentUserId = parseInt(req.user.id);

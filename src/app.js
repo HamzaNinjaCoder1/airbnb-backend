@@ -21,7 +21,14 @@ const __dirname = path.dirname(__filename);
 const isProd = process.env.NODE_ENV === 'production';
 const PROD_FRONTEND = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
 const PROD_BACKEND = process.env.SERVER_ORIGIN || 'https://dynamic-tranquility-production.up.railway.app';
-const allowedOrigins = [PROD_FRONTEND, PROD_BACKEND];
+const allowedOrigins = [
+  PROD_FRONTEND, 
+  PROD_BACKEND,
+  'https://airbnb-frontend-sooty.vercel.app',
+  'https://dynamic-tranquility-production.up.railway.app',
+  'http://localhost:3000', // For development
+  'http://localhost:3001'  // For development
+];
 
 const app = express();
 const server = http.createServer(app);
@@ -37,22 +44,26 @@ const io = new Server(server, {
   },
 });
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+// VAPID Configuration for Production
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BP0OJzfIv3gutn2bu2VbP3Y062ZYRhtLNiYxxDe_OM1aueh7bJKcx5S72UzsRs40kFsukwOxfV13oTUJo-3vOFU';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
-if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-  const msg = 'VAPID keys are not configured. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in .env';
+const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:hamzanadeem2398@gmail.com';
+
+if (!VAPID_PRIVATE_KEY) {
+  const msg = 'VAPID_PRIVATE_KEY is not configured. Set VAPID_PRIVATE_KEY in .env for production';
   if (isProd) {
     throw new Error(msg);
   } else {
     console.warn(msg);
   }
 }
+
+// Configure web-push with VAPID details
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(
-    'mailto:hamzanadeem2398@gmail.com',
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  );
+  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  console.log('✅ VAPID configured successfully for push notifications');
+} else {
+  console.warn('⚠️ VAPID not configured - push notifications will not work');
 }
 
 app.use(
