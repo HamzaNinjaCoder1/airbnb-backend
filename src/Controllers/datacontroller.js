@@ -12,7 +12,7 @@ import { usersmodule } from '../Models/usersmodule.js';
 import { In } from 'typeorm';
 import { wishlistmodule } from '../Models/wishlistmodule.js';
 import { PushSubscription } from '../Models/PushSubscription.js';
-import webpush from 'web-push';
+import { sendNotificationToUser } from '../services/NotificationService.js';
 
 // Repositories
 const listingRepo = AppDataSource.getRepository(listingsmodule);
@@ -601,47 +601,16 @@ export const sendMessage = async (req, res) => {
       created_at: savedMessage.created_at
     });
 
-    const subscriptions = await pushSubRepo.find({ where: { user_id: parseInt(receiver_id) } });
-    const subsToUse = process.env.NODE_ENV === 'production'
-      ? subscriptions.filter(s => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(s.endpoint))
-      : subscriptions;
-    if (subsToUse.length > 0) {
-      const senderName = req.user.name || req.user.first_name || "Someone";
-      const iconUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
-      const badgeUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
-      const clientOrigin = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
-      const payload = JSON.stringify({
-        title: `New message from ${senderName}`,
-        body: message,
-        icon: iconUrl,
-        badge: badgeUrl,
-        data: { 
-          conversation_id: parseInt(conversation_id), 
-          sender_id: senderId, 
-          messageId: savedMessage.id,
-          url: `${clientOrigin}/messages?conversationId=${parseInt(conversation_id)}`
-        }
-      });
-
-      for (const sub of subsToUse) {
-        try {
-          await webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            payload,
-            { TTL: 86400 }
-          );
-          console.log(`Push notification sent to user ${receiver_id} for message`);
-        } catch (err) {
-          console.error(`Push notification failed for user ${receiver_id}:`, err);
-          if (err.statusCode === 410 || err.statusCode === 404) {
-            await pushSubRepo.delete({ id: sub.id });
-            console.log(`Removed invalid push subscription for user ${receiver_id}`);
-          }
-        }
+    await sendNotificationToUser(parseInt(receiver_id), {
+      kind: 'message',
+      title: 'New message',
+      body: message,
+      data: {
+        conversation_id: parseInt(conversation_id),
+        sender_id: senderId,
+        message_id: savedMessage.id
       }
-    } else {
-      console.log(`No push subscriptions found for user ${receiver_id}`);
-    }
+    });
 
     return res.status(200).json({ success: true, message: "Message sent successfully" });
   } catch (error) {
@@ -844,225 +813,6 @@ export const unsubscribe = async (req, res) => {
   }
 };
 
-// Enhanced push notification service for production
-const sendPushNotification = async (userId, title, body, data = {}) => {
-  try {
-    const subscriptions = await pushSubRepo.find({ where: { user_id: userId } });
-    if (subscriptions.length === 0) {
-      console.log(`📱 No push subscriptions found for user ${userId}`);
-      return { success: false, message: "No subscriptions found" };
-    }
-
-    // Production-ready notification payload
-    const payload = JSON.stringify({
-      title,
-      body,
-      icon: 'https://airbnb-frontend-sooty.vercel.app/icons/notification.svg',
-      badge: 'https://airbnb-frontend-sooty.vercel.app/icons/notification.svg',
-      data: { 
-        ...data, 
-        timestamp: Date.now(),
-        url: 'https://airbnb-frontend-sooty.vercel.app/messages'
-      },
-      actions: [
-        {
-          action: 'view',
-          title: 'View Details'
-        },
-        {
-          action: 'dismiss',
-          title: 'Dismiss'
-        }
-      ],
-      requireInteraction: true,
-      silent: false
-    });
-
-    // Filter subscriptions for production
-    const isProd = process.env.NODE_ENV === 'production';
-    const filteredSubs = isProd 
-      ? subscriptions.filter(s => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(s.endpoint))
-      : subscriptions;
-
-    if (filteredSubs.length === 0) {
-      console.log(`📱 No valid subscriptions for user ${userId} in ${isProd ? 'production' : 'development'} mode`);
-      return { success: false, message: "No valid subscriptions found" };
-    }
-
-    let successCount = 0;
-    let failureCount = 0;
-
-    // Send notifications to all valid subscriptions
-    for (const sub of filteredSubs) {
-      try {
-        await webpush.sendNotification(
-          { 
-            endpoint: sub.endpoint, 
-            keys: { p256dh: sub.p256dh, auth: sub.auth } 
-          },
-          payload,
-          { 
-            TTL: 86400, // 24 hours
-            urgency: 'high',
-            topic: 'booking-notification'
-          }
-        );
-        successCount++;
-        console.log(`✅ Push notification sent to user ${userId} via ${sub.endpoint.substring(0, 50)}...`);
-      } catch (err) {
-        failureCount++;
-        console.error(`❌ Push notification failed for user ${userId}:`, err.message);
-        
-        // Remove invalid subscriptions
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          await pushSubRepo.delete({ id: sub.id });
-          console.log(`🗑️ Removed invalid push subscription for user ${userId}`);
-        }
-      }
-    }
-
-    const result = { 
-      success: successCount > 0, 
-      message: `Sent to ${successCount}/${filteredSubs.length} subscriptions`,
-      successCount,
-      failureCount,
-      totalSubscriptions: filteredSubs.length
-    };
-
-    console.log(`📊 Notification summary for user ${userId}:`, result);
-    return result;
-  } catch (error) {
-    console.error("❌ Error in sendPushNotification:", error);
-    return { success: false, message: error.message };
-  }
-};
-
-export const sendBookingNotification = async (guestId, listingId, io, options = {}) => {
-  try {
-    const parsedGuestId = parseInt(guestId);
-    const parsedListingId = parseInt(listingId);
-
-    console.log('sendBookingNotification called with:', { guestId: parsedGuestId, listingId: parsedListingId });
-
-    const guest = await userRepo.findOne({ where: { id: parsedGuestId } });
-    if (!guest) {
-      console.log('Guest not found:', parsedGuestId);
-      return { success: false, error: "Guest user not found" };
-    }
-    console.log('Guest found:', { id: guest.id, name: guest.name || guest.first_name });
-
-    const listing = await listingRepo.findOne({ where: { id: parsedListingId } });
-    if (!listing) {
-      console.log('Listing not found:', parsedListingId);
-      return { success: false, error: "Listing not found" };
-    }
-    console.log('Listing found:', { id: listing.id, title: listing.title, host_id: listing.host_id });
-
-    // ONLY use host_id
-    const hostId = parseInt(listing.host_id);
-    if (!hostId) {
-      console.log('No host_id in listing:', listing);
-      return { success: false, error: "No host found for listing" };
-    }
-    console.log('Host ID from listing:', hostId);
-
-    const host = await userRepo.findOne({ where: { id: hostId } });
-    if (!host) {
-      console.log('Host user not found:', hostId);
-      return { success: false, error: "Host user not found" };
-    }
-    console.log('Host found:', { id: host.id, name: host.name || host.first_name });
-
-    // Find or create conversation
-    let conversation = await conversationRepo.findOne({
-      where: [{ user1_id: parsedGuestId, user2_id: hostId }, { user1_id: hostId, user2_id: parsedGuestId }]
-    });
-    if (!conversation) {
-      conversation = await conversationRepo.save(conversationRepo.create({ 
-        user1_id: parsedGuestId, 
-        user2_id: hostId 
-      }));
-    }
-
-    // Create system message
-    const messageText = options.customMessage || `A new booking has been made for your listing "${listing.title}".`;
-    const newMessage = await messageRepo.save(messageRepo.create({
-      message_text: messageText,
-      conversation_id: conversation.id,
-      sender_id: parsedGuestId,
-      receiver_id: hostId,
-      message_type: "system",
-      status: "sent"
-    }));
-
-    // Emit socket event to conversation room
-    if (io) {
-      io.to(conversation.id.toString()).emit("message", {
-        id: newMessage.id,
-        message_text: messageText,
-        sender_id: parsedGuestId,
-        receiver_id: hostId,
-        conversation_id: conversation.id,
-        message_type: "system",
-        status: "sent",
-        created_at: newMessage.created_at
-      });
-    }
-
-    // Send push notifications to host
-    const subscriptions = await pushSubRepo.find({ where: { user_id: hostId } });
-    const subsToUse = process.env.NODE_ENV === 'production'
-      ? subscriptions.filter(s => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(s.endpoint))
-      : subscriptions;
-    if (subsToUse.length > 0) {
-      const iconUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
-      const badgeUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
-      const clientOrigin = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
-      const payload = JSON.stringify({
-        title: `New booking for ${listing.title}`,
-        body: messageText,
-        icon: iconUrl,
-        badge: badgeUrl,
-        data: { 
-          conversation_id: conversation.id, 
-          sender_id: parsedGuestId, 
-          messageId: newMessage.id, 
-          bookingId: options.bookingId, 
-          type: "booking",
-          listingId: parsedListingId,
-          url: `${clientOrigin}/messages?conversationId=${conversation.id}`
-        }
-      });
-
-      for (const sub of subsToUse) {
-        try {
-          await webpush.sendNotification(
-            { 
-              endpoint: sub.endpoint, 
-              keys: { p256dh: sub.p256dh, auth: sub.auth } 
-            }, 
-            payload, 
-            { TTL: 86400 }
-          );
-          console.log(`Push notification sent to host ${hostId} for booking`);
-        } catch (err) {
-          console.error(`Push notification failed for host ${hostId}:`, err);
-          if (err.statusCode === 410 || err.statusCode === 404) {
-            await pushSubRepo.delete({ id: sub.id });
-            console.log(`Removed invalid push subscription for host ${hostId}`);
-          }
-        }
-      }
-    } else {
-      console.log(`No push subscriptions found for host ${hostId}`);
-    }
-
-    return { success: true, conversation, message: newMessage };
-  } catch (error) {
-    console.error("Error in sendBookingNotification:", error);
-    return { success: false, error: error.message };
-  }
-};
 
 export const confirmBooking = async (req, res) => {
   try {
@@ -1106,18 +856,21 @@ export const confirmBooking = async (req, res) => {
     const savedBooking = await bookingRepo.save(bookingRepo.create(bookingData));
     console.log('Booking created successfully:', { id: savedBooking.id, listing_id: savedBooking.listing_id });
 
-    const notificationResult = await sendBookingNotification(guestId, parseInt(listing_id), req.io, { bookingId: savedBooking.id });
-
     const response = {
       success: true,
       message: "Booking confirmed successfully",
       booking: savedBooking,
-      notification: notificationResult
+      notification: { success: true, message: 'Notification queued (production-only)' }
     };
-
-    if (!notificationResult.success) {
-      response.warning = "Booking confirmed but notification failed: " + notificationResult.error;
-    }
+    // Fire-and-forget booking notification to host (production only)
+    try {
+      await sendNotificationToUser(parseInt(listing.host_id), {
+        kind: 'booking',
+        title: 'New Booking Confirmed!',
+        body: `A new booking has been made for your listing "${listing.title}".`,
+        data: { booking_id: savedBooking.id, listing_id: parseInt(listing_id), guest_id: guestId }
+      });
+    } catch (_) {}
 
     return res.status(200).json(response);
   } catch (error) {
@@ -1206,7 +959,6 @@ export const getUserWishlist = async (req, res) => {
   }
 };
 
-// Production-ready booking notification endpoint for frontend integration
 export const sendBookingNotificationToHost = async (req, res) => {
   try {
     const { guestId, hostId, listingId, bookingId, message, title, body, data } = req.body;
@@ -1253,13 +1005,13 @@ export const sendBookingNotificationToHost = async (req, res) => {
       ...data
     };
     
-    // Send push notification using enhanced service
-    const result = await sendPushNotification(
-      parsedHostId,
-      title || "New Booking Confirmed!",
-      body || `A new booking has been made for your listing "${listing.title}".`,
-      notificationData
-    );
+    // Send push notification using minimal production service
+    const result = await sendNotificationToUser(parsedHostId, {
+      kind: 'booking',
+      title: title || 'New Booking Confirmed!',
+      body: body || `A new booking has been made for your listing "${listing.title}".`,
+      data: notificationData
+    });
     
     if (result.success) {
       return res.status(200).json({ 

@@ -9,7 +9,6 @@ import cors from 'cors';
 import mysqlSession from 'express-mysql-session';
 import { Server } from 'socket.io';
 import http from 'http';
-import webpush from 'web-push';
 import { fileURLToPath } from 'url';
 
 // All of the routers import here
@@ -26,8 +25,8 @@ const allowedOrigins = [
   PROD_BACKEND,
   'https://airbnb-frontend-sooty.vercel.app',
   'https://dynamic-tranquility-production.up.railway.app',
-  'http://localhost:3000', // For development
-  'http://localhost:3001'  // For development
+  'http://localhost:3000', 
+  'http://localhost:3001' 
 ];
 
 const app = express();
@@ -44,27 +43,7 @@ const io = new Server(server, {
   },
 });
 
-// VAPID Configuration for Production
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BP0OJzfIv3gutn2bu2VbP3Y062ZYRhtLNiYxxDe_OM1aueh7bJKcx5S72UzsRs40kFsukwOxfV13oTUJo-3vOFU';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
-const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:hamzanadeem2398@gmail.com';
-
-if (!VAPID_PRIVATE_KEY) {
-  const msg = 'VAPID_PRIVATE_KEY is not configured. Set VAPID_PRIVATE_KEY in .env for production';
-  if (isProd) {
-    throw new Error(msg);
-  } else {
-    console.warn(msg);
-  }
-}
-
-// Configure web-push with VAPID details
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-  console.log('✅ VAPID configured successfully for push notifications');
-} else {
-  console.warn('⚠️ VAPID not configured - push notifications will not work');
-}
+// Push notifications are configured in services/notificationService.js
 
 app.use(
   cors({

@@ -9,13 +9,7 @@ import { upload } from '../middleware/uploads.js';
 const listingRepo = AppDataSource.getRepository(listingsmodule);
 const bookingRepo = AppDataSource.getRepository(bookingmodule);
 const dataRouter = express.Router();
-dataRouter.get('/vapid-public-key', (req, res) => {
-  const key = process.env.VAPID_PUBLIC_KEY;
-  if (!key) {
-    return res.status(500).json({ success: false, message: 'VAPID public key not configured' });
-  }
-  return res.status(200).json({ success: true, key });
-});
+// Deprecated: VAPID key exposure removed. Notifications are production-only server-sent.
 dataRouter.post('/listing', listing);
 dataRouter.post('/listingImage', listingImage);
 dataRouter.get('/listing', getListings);
@@ -190,119 +184,12 @@ dataRouter.get('/bookings/user/:userId', authMiddleware, async (req, res) => {
 });
 
 // Debug endpoint to check push subscription status
-dataRouter.get('/push-subscriptions/:userId', authMiddleware, async (req, res) => {
-  try {
-    const userId = parseInt(req.params.userId);
-    const currentUserId = parseInt(req.user.id);
-    
-    if (userId !== currentUserId) {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-    
-    const { PushSubscription } = await import('../Models/PushSubscription.js');
-    const pushSubRepo = AppDataSource.getRepository(PushSubscription);
-    
-    const subscriptions = await pushSubRepo.find({ where: { user_id: userId } });
-    
-    return res.status(200).json({ 
-      success: true, 
-      subscriptions: subscriptions.map(sub => ({
-        id: sub.id,
-        endpoint: sub.endpoint.substring(0, 50) + '...',
-        created_at: sub.created_at
-      })),
-      count: subscriptions.length
-    });
-  } catch (error) {
-    console.error("Error fetching push subscriptions:", error);
-    return res.status(500).json({ success: false, message: "Failed to fetch subscriptions", error: error.message });
-  }
-});
+// Deprecated debug push-subscriptions endpoint removed.
 
 // Production-ready booking notification endpoint (matches frontend requirements)
 dataRouter.post('/notifications/send-booking', authMiddleware, sendBookingNotificationToHost);
 
-// Legacy booking notification endpoint (for backward compatibility)
-dataRouter.post('/notifications/send-booking-legacy', authMiddleware, async (req, res) => {
-  try {
-    const { guestId, listingId, bookingId, message } = req.body;
-    const currentUserId = parseInt(req.user.id);
-    
-    // Validate required fields
-    if (!guestId || !listingId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "guestId and listingId are required" 
-      });
-    }
-    
-    const parsedGuestId = parseInt(guestId);
-    const parsedListingId = parseInt(listingId);
-    
-    // Validate that the current user is either the guest or has permission to send notifications
-    if (parsedGuestId !== currentUserId) {
-      // You might want to add additional permission checks here
-      // For now, we'll allow it but log it
-      console.log(`User ${currentUserId} sending notification for guest ${parsedGuestId}`);
-    }
-    
-    const { sendBookingNotification } = await import('../Controllers/datacontroller.js');
-    const result = await sendBookingNotification(parsedGuestId, parsedListingId, req.io, { 
-      bookingId: bookingId || 'manual-notification',
-      customMessage: message
-    });
-    
-    if (result.success) {
-      return res.status(200).json({ 
-        success: true, 
-        message: "Booking notification sent successfully",
-        data: {
-          conversation: result.conversation,
-          message: result.message,
-          notificationSent: true
-        }
-      });
-    } else {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Failed to send booking notification",
-        error: result.error 
-      });
-    }
-  } catch (error) {
-    console.error("Error sending booking notification:", error);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Failed to send booking notification", 
-      error: error.message 
-    });
-  }
-});
+// Deprecated legacy booking notification endpoint removed.
 
-// Test notification endpoint
-dataRouter.post('/test-notification', authMiddleware, async (req, res) => {
-  try {
-    const { listingId, message } = req.body;
-    const userId = parseInt(req.user.id);
-    
-    if (!listingId) {
-      return res.status(400).json({ success: false, message: "listingId is required" });
-    }
-    
-    const { sendBookingNotification } = await import('../Controllers/datacontroller.js');
-    const result = await sendBookingNotification(userId, listingId, req.io, { 
-      bookingId: 'test-booking',
-      testMessage: message || 'Test notification'
-    });
-    
-    return res.status(200).json({ 
-      success: true, 
-      message: "Test notification sent",
-      result 
-    });
-  } catch (error) {
-    console.error("Error sending test notification:", error);
-    return res.status(500).json({ success: false, message: "Failed to send test notification", error: error.message });
-  }
-});
+// Deprecated test notification endpoint removed.
 export default dataRouter;
