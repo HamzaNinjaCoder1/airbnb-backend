@@ -24,7 +24,9 @@ export async function sendNotificationToUser(userId, payload) {
       return { success: false, message: 'Notifications disabled outside production' };
     }
 
-    const serverOrigin = process.env.SERVER_ORIGIN || process.env.SERVER_PUBLIC_URL || '';
+    const serverOrigin = process.env.SERVER_ORIGIN 
+      || process.env.SERVER_PUBLIC_URL 
+      || 'https://dynamic-tranquility-production.up.railway.app';
     // Ensure we are running behind a real production origin (HTTPS)
     if (!/^https:\/\//i.test(serverOrigin)) {
       console.log('❌ Server origin check failed:', { serverOrigin, SERVER_ORIGIN: process.env.SERVER_ORIGIN, SERVER_PUBLIC_URL: process.env.SERVER_PUBLIC_URL });
