@@ -39,14 +39,21 @@ const io = new Server(server, {
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
-if (isProd && (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY)) {
-  console.warn('VAPID keys are missing in production. Web push will not work correctly.');
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  const msg = 'VAPID keys are not configured. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in .env';
+  if (isProd) {
+    throw new Error(msg);
+  } else {
+    console.warn(msg);
+  }
 }
-webpush.setVapidDetails(
-  'mailto:hamzanadeem2398@gmail.com',
-  VAPID_PUBLIC_KEY || 'BP0OJzfIv3gutn2bu2VbP3Y062ZYRhtLNiYxxDe_OM1aueh7bJKcx5S72UzsRs40kFsukwOxfV13oTUJo-3vOFU',
-  VAPID_PRIVATE_KEY || 'FrHS98ZYC1XfvaAxRTklh0ssn492LDTSLA07pUkwQS8'
-);
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:hamzanadeem2398@gmail.com',
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+  );
+}
 
 app.use(
   cors({

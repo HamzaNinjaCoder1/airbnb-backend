@@ -364,8 +364,6 @@ export const uploadMultipleImages = async (req, res) => {
     let listing = await listingRepo.findOne({ 
       where: { id: listingId, host_id: hostId } 
     });
-
-    // Fallback: if host/listing pair not found, allow by listingId alone
     if (!listing) {
       listing = await listingRepo.findOne({ where: { id: listingId } });
     }
@@ -736,7 +734,6 @@ export const savePushSubscription = async (req, res) => {
     const { endpoint, keys } = subscription || {};
     if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ success: false, message: "endpoint, p256dh, and auth are required" });
 
-    // In production, reject localhost/loopback endpoints
     const isProd = process.env.NODE_ENV === 'production';
     if (isProd && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(endpoint)) {
       return res.status(400).json({ success: false, message: "Localhost push endpoint not allowed in production" });

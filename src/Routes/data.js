@@ -9,6 +9,13 @@ import { upload } from '../middleware/uploads.js';
 const listingRepo = AppDataSource.getRepository(listingsmodule);
 const bookingRepo = AppDataSource.getRepository(bookingmodule);
 const dataRouter = express.Router();
+dataRouter.get('/vapid-public-key', (req, res) => {
+  const key = process.env.VAPID_PUBLIC_KEY;
+  if (!key) {
+    return res.status(500).json({ success: false, message: 'VAPID public key not configured' });
+  }
+  return res.status(200).json({ success: true, key });
+});
 dataRouter.post('/listing', listing);
 dataRouter.post('/listingImage', listingImage);
 dataRouter.get('/listing', getListings);
