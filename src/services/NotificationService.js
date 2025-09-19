@@ -24,14 +24,21 @@ export async function sendNotificationToUser(userId, payload) {
       return { success: false, message: 'Notifications disabled outside production' };
     }
 
-    const serverOrigin = process.env.SERVER_ORIGIN || '';
+    const serverOrigin = process.env.SERVER_ORIGIN || process.env.SERVER_PUBLIC_URL || '';
     // Ensure we are running behind a real production origin (HTTPS)
     if (!/^https:\/\//i.test(serverOrigin)) {
+      console.log('❌ Server origin check failed:', { serverOrigin, SERVER_ORIGIN: process.env.SERVER_ORIGIN, SERVER_PUBLIC_URL: process.env.SERVER_PUBLIC_URL });
       return { success: false, message: 'Server origin is not production (https)'};
     }
 
     configureWebPush();
     if (!isConfigured) {
+      console.log('❌ VAPID not configured:', { 
+        VAPID_PUBLIC_KEY: !!process.env.VAPID_PUBLIC_KEY, 
+        VAPID_PRIVATE_KEY: !!process.env.VAPID_PRIVATE_KEY,
+        VAPID_EMAIL: process.env.VAPID_EMAIL,
+        VAPID_CONTACT: process.env.VAPID_CONTACT
+      });
       return { success: false, message: 'VAPID keys not configured' };
     }
 
@@ -45,6 +52,7 @@ export async function sendNotificationToUser(userId, payload) {
       return true;
     });
     if (filtered.length === 0) {
+      console.log('❌ No valid subscriptions for user:', { userId, totalSubscriptions: subscriptions.length, filteredCount: filtered.length });
       return { success: false, message: 'No valid subscriptions' };
     }
 

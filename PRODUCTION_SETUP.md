@@ -14,7 +14,9 @@ VAPID_CONTACT=hamzanadeem2398@gmail.com
 # Server Configuration
 NODE_ENV=production
 SERVER_ORIGIN=https://dynamic-tranquility-production.up.railway.app
+SERVER_PUBLIC_URL=https://dynamic-tranquility-production.up.railway.app
 CLIENT_ORIGIN=https://airbnb-frontend-sooty.vercel.app
+NOTIFICATION_ICON_URL=https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Cutout.png
 ```
 
 ## Generate VAPID Private Key

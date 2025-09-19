@@ -1006,12 +1006,15 @@ export const sendBookingNotificationToHost = async (req, res) => {
     };
     
     // Send push notification using minimal production service
+    console.log('📱 Attempting to send notification to host:', { hostId: parsedHostId, listingId: parsedListingId });
     const result = await sendNotificationToUser(parsedHostId, {
       kind: 'booking',
       title: title || 'New Booking Confirmed!',
       body: body || `A new booking has been made for your listing "${listing.title}".`,
       data: notificationData
     });
+    
+    console.log('📱 Notification result:', result);
     
     if (result.success) {
       return res.status(200).json({ 
@@ -1027,7 +1030,12 @@ export const sendBookingNotificationToHost = async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         message: "Failed to send notification",
-        error: result.message 
+        error: result.message,
+        debug: {
+          hostId: parsedHostId,
+          listingId: parsedListingId,
+          result
+        }
       });
     }
     
