@@ -18,7 +18,6 @@ import usersRouter from './Routes/users.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const allowedOrigins = [
   "https://airbnb-frontend-sooty.vercel.app",
   "https://dynamic-tranquility-production.up.railway.app",
