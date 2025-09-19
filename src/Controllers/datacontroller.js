@@ -694,6 +694,22 @@ export const getConversationsByUserId = async (req, res) => {
 
 export const savePushSubscription = async (req, res) => {
   try {
+    // In production, ensure the request originates from the configured frontend
+    const isProd = process.env.NODE_ENV === 'production';
+    const clientOrigin = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
+    if (isProd) {
+      const originHeader = req.headers.origin || '';
+      const refererHeader = req.headers.referer || '';
+      const originOk = originHeader === clientOrigin;
+      const refererOk = typeof refererHeader === 'string' && refererHeader.startsWith(clientOrigin);
+      if (!originOk && !refererOk) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: invalid request origin for push subscription'
+        });
+      }
+    }
+
     const { subscription } = req.body;
     const user_id = parseInt(req.user?.id);
 
@@ -721,7 +737,6 @@ export const savePushSubscription = async (req, res) => {
     }
 
     // Production validation - reject localhost endpoints
-    const isProd = process.env.NODE_ENV === 'production';
     if (isProd && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(endpoint)) {
       return res.status(400).json({ 
         success: false, 
@@ -1058,14 +1073,15 @@ export const sendBookingNotificationToHost = async (req, res) => {
         }
       });
     } else {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Failed to send notification",
-        error: result.message,
-        debug: {
+      // Do not fail the request for non-critical push errors. Return 200 with diagnostic info
+      // so the frontend UX continues without surfacing a 400.
+      return res.status(200).json({ 
+        success: true, 
+        message: "Notification not sent (non-critical)",
+        data: {
           hostId: parsedHostId,
           listingId: parsedListingId,
-          result
+          notificationResult: result
         }
       });
     }
