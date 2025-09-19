@@ -871,23 +871,49 @@ export const confirmBooking = async (req, res) => {
     const savedBooking = await bookingRepo.save(bookingRepo.create(bookingData));
     console.log('Booking created successfully:', { id: savedBooking.id, listing_id: savedBooking.listing_id });
 
-    const response = {
-      success: true,
-      message: "Booking confirmed successfully",
-      booking: savedBooking,
-      notification: { success: true, message: 'Notification queued (production-only)' }
-    };
-    // Fire-and-forget booking notification to host (production only)
+    // Attempt to send notifications to both host and guest
+    let hostNotification = { success: false, message: 'not sent' };
+    let guestNotification = { success: false, message: 'not sent' };
     try {
-      await sendNotificationToUser(parseInt(listing.host_id), {
+      hostNotification = await sendNotificationToUser(parseInt(listing.host_id), {
         kind: 'booking',
         title: 'New Booking Confirmed!',
         body: `A new booking has been made for your listing "${listing.title}".`,
-        data: { booking_id: savedBooking.id, listing_id: parseInt(listing_id), guest_id: guestId }
+        data: {
+          booking_id: savedBooking.id,
+          listing_id: parseInt(listing_id),
+          guest_id: guestId,
+          url: `${process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app'}/messages`
+        }
       });
-    } catch (_) {}
+    } catch (e) {
+      console.log('Host push send error:', e?.message);
+    }
+    try {
+      guestNotification = await sendNotificationToUser(guestId, {
+        kind: 'booking',
+        title: 'Booking Confirmed!',
+        body: `Your booking for "${listing.title}" is confirmed.`,
+        data: {
+          booking_id: savedBooking.id,
+          listing_id: parseInt(listing_id),
+          host_id: parseInt(listing.host_id),
+          url: `${process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app'}/messages`
+        }
+      });
+    } catch (e) {
+      console.log('Guest push send error:', e?.message);
+    }
 
-    return res.status(200).json(response);
+    return res.status(200).json({
+      success: true,
+      message: "Booking confirmed successfully",
+      booking: savedBooking,
+      notifications: {
+        toHost: hostNotification,
+        toGuest: guestNotification
+      }
+    });
   } catch (error) {
     console.error("Error in confirmBooking:", error);
     return res.status(500).json({ success: false, message: "Failed to confirm booking", error: error.message });
