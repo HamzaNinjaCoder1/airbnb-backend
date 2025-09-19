@@ -18,12 +18,10 @@ import usersRouter from './Routes/users.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const allowedOrigins = [
-  "https://airbnb-frontend-sooty.vercel.app",
-  "https://dynamic-tranquility-production.up.railway.app",
-  process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app'
-];
 const isProd = process.env.NODE_ENV === 'production';
+const PROD_FRONTEND = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
+const PROD_BACKEND = process.env.SERVER_ORIGIN || 'https://dynamic-tranquility-production.up.railway.app';
+const allowedOrigins = [PROD_FRONTEND, PROD_BACKEND];
 
 const app = express();
 const server = http.createServer(app);
@@ -39,10 +37,15 @@ const io = new Server(server, {
   },
 });
 
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+if (isProd && (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY)) {
+  console.warn('VAPID keys are missing in production. Web push will not work correctly.');
+}
 webpush.setVapidDetails(
-  "mailto:hamzanadeem2398@gmail.com",
-  process.env.VAPID_PUBLIC_KEY || 'BP0OJzfIv3gutn2bu2VbP3Y062ZYRhtLNiYxxDe_OM1aueh7bJKcx5S72UzsRs40kFsukwOxfV13oTUJo-3vOFU',
-  process.env.VAPID_PRIVATE_KEY || 'FrHS98ZYC1XfvaAxRTklh0ssn492LDTSLA07pUkwQS8'
+  'mailto:hamzanadeem2398@gmail.com',
+  VAPID_PUBLIC_KEY || 'BP0OJzfIv3gutn2bu2VbP3Y062ZYRhtLNiYxxDe_OM1aueh7bJKcx5S72UzsRs40kFsukwOxfV13oTUJo-3vOFU',
+  VAPID_PRIVATE_KEY || 'FrHS98ZYC1XfvaAxRTklh0ssn492LDTSLA07pUkwQS8'
 );
 
 app.use(
@@ -56,6 +59,16 @@ app.use(
   })
 );
 
+if (isProd) {
+  app.use((req, res, next) => {
+    const origin = req.headers.origin || '';
+    if (/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(origin)) {
+      return res.status(403).json({ error: 'Localhost origin not allowed in production' });
+    }
+    next();
+  });
+}
+
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -64,8 +77,6 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-// Serve uploaded images from both potential locations to ensure compatibility
-// with local dev and production deployments
 app.use('/uploads', express.static(path.join(process.cwd(), 'src', 'uploads')));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons')));

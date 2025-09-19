@@ -604,7 +604,10 @@ export const sendMessage = async (req, res) => {
     });
 
     const subscriptions = await pushSubRepo.find({ where: { user_id: parseInt(receiver_id) } });
-    if (subscriptions.length > 0) {
+    const subsToUse = process.env.NODE_ENV === 'production'
+      ? subscriptions.filter(s => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(s.endpoint))
+      : subscriptions;
+    if (subsToUse.length > 0) {
       const senderName = req.user.name || req.user.first_name || "Someone";
       const iconUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
       const badgeUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
@@ -622,7 +625,7 @@ export const sendMessage = async (req, res) => {
         }
       });
 
-      for (const sub of subscriptions) {
+      for (const sub of subsToUse) {
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -733,6 +736,12 @@ export const savePushSubscription = async (req, res) => {
     const { endpoint, keys } = subscription || {};
     if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ success: false, message: "endpoint, p256dh, and auth are required" });
 
+    // In production, reject localhost/loopback endpoints
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(endpoint)) {
+      return res.status(400).json({ success: false, message: "Localhost push endpoint not allowed in production" });
+    }
+
     const existing = await pushSubRepo.findOne({ where: { endpoint } });
     if (existing) {
       existing.p256dh = keys.p256dh;
@@ -785,7 +794,11 @@ const sendPushNotification = async (userId, title, body, data = {}) => {
     });
 
     let successCount = 0;
-    for (const sub of subscriptions) {
+    const filteredSubs = process.env.NODE_ENV === 'production' 
+      ? subscriptions.filter(s => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(s.endpoint))
+      : subscriptions;
+
+    for (const sub of filteredSubs) {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -883,7 +896,10 @@ export const sendBookingNotification = async (guestId, listingId, io, options = 
 
     // Send push notifications to host
     const subscriptions = await pushSubRepo.find({ where: { user_id: hostId } });
-    if (subscriptions.length > 0) {
+    const subsToUse = process.env.NODE_ENV === 'production'
+      ? subscriptions.filter(s => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(s.endpoint))
+      : subscriptions;
+    if (subsToUse.length > 0) {
       const iconUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
       const badgeUrl = "https://www.pngall.com/wp-content/uploads/13/Airbnb-Logo-PNG-Pic.png";
       const clientOrigin = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
@@ -903,7 +919,7 @@ export const sendBookingNotification = async (guestId, listingId, io, options = 
         }
       });
 
-      for (const sub of subscriptions) {
+      for (const sub of subsToUse) {
         try {
           await webpush.sendNotification(
             { 
