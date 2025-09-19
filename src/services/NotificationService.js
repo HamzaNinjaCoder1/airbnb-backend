@@ -57,6 +57,7 @@ export async function sendNotificationToUser(userId, payload) {
     }
 
     const clientOrigin = process.env.CLIENT_ORIGIN || 'https://airbnb-frontend-sooty.vercel.app';
+    const iconUrl = process.env.NOTIFICATION_ICON_URL || '/icons/notification.svg';
     const minimalPayload = JSON.stringify({
       title: payload?.title || 'Notification',
       body: payload?.body || '',
@@ -64,7 +65,9 @@ export async function sendNotificationToUser(userId, payload) {
         ...(payload?.data || {}),
         kind: payload?.kind || 'generic',
         url: payload?.data?.url || `${clientOrigin}/messages`
-      }
+      },
+      icon: payload?.icon || iconUrl,
+      badge: payload?.badge || iconUrl
     });
 
     let sent = 0;

@@ -961,7 +961,8 @@ export const getUserWishlist = async (req, res) => {
 
 export const sendBookingNotificationToHost = async (req, res) => {
   try {
-    const { guestId, hostId, listingId, bookingId, message, title, body, data } = req.body;
+    console.log('📩 /notifications/send-booking payload:', req.body);
+    const { guestId, hostId, listingId, bookingId, message, title, body, data, subscription } = req.body || {};
     const currentUserId = parseInt(req.user.id);
     
     // Validate required fields
@@ -992,6 +993,38 @@ export const sendBookingNotificationToHost = async (req, res) => {
       });
     }
     
+    // Optional: upsert subscription sent by client (to avoid frontend changes)
+    try {
+      if (subscription && subscription.endpoint && subscription.keys?.p256dh && subscription.keys?.auth) {
+        const isProd = process.env.NODE_ENV === 'production';
+        const endpoint = String(subscription.endpoint);
+        if (isProd && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(endpoint)) {
+          console.log('❌ Ignoring localhost subscription in production:', endpoint);
+        } else if (!/^https:\/\//.test(endpoint)) {
+          console.log('❌ Ignoring non-HTTPS subscription:', endpoint);
+        } else {
+          const existing = await pushSubRepo.findOne({ where: { endpoint } });
+          if (existing) {
+            existing.p256dh = subscription.keys.p256dh;
+            existing.auth = subscription.keys.auth;
+            existing.user_id = parsedHostId;
+            await pushSubRepo.save(existing);
+            console.log(`✅ Updated push subscription for user ${parsedHostId} (from request body)`);
+          } else {
+            await pushSubRepo.save({
+              endpoint,
+              p256dh: subscription.keys.p256dh,
+              auth: subscription.keys.auth,
+              user_id: parsedHostId
+            });
+            console.log(`✅ Created push subscription for user ${parsedHostId} (from request body)`);
+          }
+        }
+      }
+    } catch (subErr) {
+      console.log('❌ Failed to upsert subscription from request body:', subErr?.message);
+    }
+
     // Prepare notification data
     const notificationData = {
       type: "booking_confirmation",
